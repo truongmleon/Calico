@@ -42,14 +42,14 @@ Other headings can be used:
 Use image tags for resizing.
 
 ```md
-Visit [Leon's website]("https://leontt.vercel.app")!
+Visit [Leon's website](https://leontt.vercel.app)!
 
 <img src="https://leontt.vercel.app/switch/1.webp" alt="Switch" width="200"/>
 
 [README.md](README.md)
 ```
 
-Visit [Leon's website]("https://leontt.vercel.app")!
+Visit [Leon's website](https://leontt.vercel.app)!
 
 <img src="https://leontt.vercel.app/switch/1.webp" alt="Switch" width="200"/>
 
