@@ -1,0 +1,7 @@
+{
+    "watch": ["bin"],
+    "ext": "ts",
+    "exec": "npm run ts",
+    "ignore": ["node_modules/**", "*.log"]
+  }
+  
