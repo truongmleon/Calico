@@ -39,10 +39,12 @@ Other headings can be used:
 
 ## Links
 
+Use image tags for resizing.
+
 ```md
 Visit [Leon's website]("https://leontt.vercel.app")!
 
-![Switch](https://leontt.vercel.app/switch/1.webp)
+<img src="https://leontt.vercel.app/switch/1.webp" alt="Switch" width="200"/>
 
 [README.md](README.md)
 ```
@@ -136,3 +138,9 @@ JavaScript[^1].
 | ----------- | ----------- |
 | Header | Title |
 | Paragraph | Text |
+
+## Comments
+
+```md
+<!-- COMMENT-->
+```
