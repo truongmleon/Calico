@@ -2,7 +2,7 @@
 
 The heading of the markdown contains basic information about your file. It should occupy the first four lines. The title is used as an ```h1``` tag. The date is used in the title of the post.
 
-```md
+```txt
 +++
 title = "First Post"
 date = 29/6/2024
@@ -66,6 +66,8 @@ print("Java sucks!")
 ```
 
 ## Subscripts and Superscripts
+
+This isn't showing on GitHub, but it does work.
 
 ```md
 Hello~hi~
