@@ -142,5 +142,5 @@ JavaScript[^1].
 ## Comments
 
 ```md
-<!-- COMMENT-->
+<!-- COMMENT -->
 ```
