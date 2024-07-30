@@ -49,7 +49,7 @@ Visit [Leon's website]("https://leontt.vercel.app")!
 
 Visit [Leon's website]("https://leontt.vercel.app")!
 
-![Switch](https://leontt.vercel.app/switch/1.webp)
+<img src="https://leontt.vercel.app/switch/1.webp" alt="Switch" width="200"/>
 
 Check out the [README.md](README.md).
 
