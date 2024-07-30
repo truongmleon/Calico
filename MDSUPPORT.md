@@ -1,6 +1,6 @@
 # Markdown Support
 
-The heading of the markdown contains basic information about your file. It should occupy the first four lines. The title is used as an ```h1``` tag. The date is used in the title of the post.
+The heading of the markdown contains basic information about your file. It occupies the first four lines. The title is used as an ```h1``` tag. The date is used in the post as well. The date may be empty, but the title may not.
 
 ```txt
 +++
@@ -9,11 +9,12 @@ date = 29/6/2024
 +++
 ```
 
-Other headings can be used:
+Other headings (no ```h1```):
 
 ```md
 ## Heading 2
 ### Heading 3
+<!-- and so on to h6 -->
 ```
 
 ## Heading 2
@@ -144,3 +145,7 @@ JavaScript[^1].
 ```md
 <!-- COMMENT -->
 ```
+
+## HTML
+
+You can write HTML if you would like also. It will be rendered.
