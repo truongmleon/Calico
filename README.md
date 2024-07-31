@@ -1,6 +1,6 @@
 # Calico
 
-Calico is a static-site generator that I made because I'm tired of using the ones already on the internet.
+Calico is a static-site generator that I made because I'm tired of using the ones already on the internet. This is in development, but I have decent hopes.
 
 ## How to Use Calico
 
@@ -8,7 +8,9 @@ Calico CLI starts with the ```cali``` keyword.
 
 To create a new project, run:
 
-```cali start```
+```cli
+cali start
+```
 
 The ```start``` command creates the folder structure for the project.
 
