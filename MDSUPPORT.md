@@ -84,6 +84,8 @@ Bye^Bye^
 
 ## Lists
 
+Use two spaces for list levels, not four.
+
 ```md
 - Today
 - It is

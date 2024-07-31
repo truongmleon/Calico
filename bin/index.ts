@@ -47,6 +47,21 @@ const getDaySuffix: (day: number) => string = (day: number) => {
     return day + "th";
 }
 
+const repeatTag: (tag: string, level: number) => string[] = (tag: string, level: number) => {
+    let body: string = "";
+    let whitespace = ""
+
+    for (let i = 0; i < level - 1; i++) {
+        whitespace += "    ";
+    }
+
+    for (let i = 0; i < level; i++) {
+        body += `${whitespace}   ${tag}\n                `;
+    }
+
+    return [body, whitespace];
+}
+
 //Description
 program
     .name("calico")
@@ -135,12 +150,9 @@ program
         while ((current = dir.readSync()) !== null) {
             let body: string = "";
             const indent: string = "\n                ";
-            const rl: readline.Interface = readline.createInterface({
-                input: fs.createReadStream(`${projectPath}/content/markdown/${current.name}`)
-            });
 
             const lines: string[] = fs.readFileSync(`${projectPath}/content/markdown/${current.name}`, "utf8").split("\n");
-            //console.log(lines)
+
             for (let i: number = 1; i < lines.length; i++) {
                 if (lines[i] == "+++") continue;
 
@@ -165,16 +177,24 @@ program
                         body += `<p>${lines[i]}</p>${indent}`;
                     }
                 } else if (lines[i].indexOf("- ") === 0) {
-                    let nextIndex: number = 0;
-
+                    i--;
                     body += `<ul>${indent}`;
-                    body += `<li>${lines[i].substring(2)}</li>${indent}`;
 
-                    while (lines[i + 1].indexOf("- ") === 0) {
-                        i++;
-                        body += `<li>${lines[i].substring(2)}</li>${indent}`;
+                    if (lines[i + 1].indexOf("- [ ]") != -1 || lines[i + 1].toLowerCase().indexOf("- [x]") != -1) {
+                        
+                        continue;
                     }
 
+                    while (lines[i + 1].indexOf("- ") != -1) {
+                        i++;
+                        const index: number = lines[i].indexOf("- ");
+                        const level: number = index / 2;
+                        const repeats: string[] = repeatTag("<ul>", level)
+
+                        body += repeats[0];
+                        body += `${repeats[1]}    <li>${lines[i].substring(index + 2)}</li>${indent}`;
+                        body += repeatTag("</ul>", level)[0];
+                    }
 
                     body += `</ul>${indent}`;
                 }

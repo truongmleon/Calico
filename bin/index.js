@@ -4,7 +4,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var commander_1 = require("commander");
 var fs = require("node:fs");
 var path = require("node:path");
-var readline = require("node:readline");
 var program = new commander_1.Command();
 var projectPath = path.resolve(__dirname, "..");
 var makeCSS = function (name) {
@@ -44,6 +43,17 @@ var getDaySuffix = function (day) {
     if (single === 3)
         return "3rd";
     return day + "th";
+};
+var repeatTag = function (tag, level) {
+    var body = "";
+    var whitespace = "";
+    for (var i = 0; i < level - 1; i++) {
+        whitespace += "    ";
+    }
+    for (var i = 0; i < level; i++) {
+        body += "".concat(whitespace, "   ").concat(tag, "\n                ");
+    }
+    return [body, whitespace];
 };
 //Description
 program
@@ -125,11 +135,7 @@ program
     while ((current = dir.readSync()) !== null) {
         var body = "";
         var indent = "\n                ";
-        var rl = readline.createInterface({
-            input: fs.createReadStream("".concat(projectPath, "/content/markdown/").concat(current.name))
-        });
         var lines = fs.readFileSync("".concat(projectPath, "/content/markdown/").concat(current.name), "utf8").split("\n");
-        //console.log(lines)
         for (var i = 1; i < lines.length; i++) {
             if (lines[i] == "+++")
                 continue;
@@ -158,12 +164,19 @@ program
                 }
             }
             else if (lines[i].indexOf("- ") === 0) {
-                var nextIndex = 0;
+                i--;
                 body += "<ul>".concat(indent);
-                body += "<li>".concat(lines[i].substring(2), "</li>").concat(indent);
-                while (lines[i + 1].indexOf("- ") === 0) {
+                if (lines[i + 1].indexOf("- [ ]") != -1 || lines[i + 1].toLowerCase().indexOf("- [x]") != -1) {
+                    continue;
+                }
+                while (lines[i + 1].indexOf("- ") != -1) {
                     i++;
-                    body += "<li>".concat(lines[i].substring(2), "</li>").concat(indent);
+                    var index = lines[i].indexOf("- ");
+                    var level = index / 2;
+                    var repeats = repeatTag("<ul>", level);
+                    body += repeats[0];
+                    body += "".concat(repeats[1], "    <li>").concat(lines[i].substring(index + 2), "</li>").concat(indent);
+                    body += repeatTag("</ul>", level)[0];
                 }
                 body += "</ul>".concat(indent);
             }
