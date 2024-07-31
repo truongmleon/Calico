@@ -12,6 +12,16 @@ To create a new project, run:
 cali start
 ```
 
+If you want CSS/SCSS:
+
+```cli
+cali start --css
+```
+
+```cli
+cali start --scss
+```
+
 The ```start``` command creates the folder structure for the project.
 
 Nodemon is a major dependency for managing TypeScript code and refreshing. Basically, Nodemon checks when the TypeScript file is being edited to convert to JavaScript and when markdown files in the content folder are being edited. This allows for less commands in the CLI and more focus on making the project.
