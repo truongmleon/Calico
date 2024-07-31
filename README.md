@@ -18,5 +18,5 @@ Install using npm:
 
 ```cli
 npm i
-Nodemon
+nodemon
 ```

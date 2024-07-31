@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as readline from 'node:readline';
 
 const program: Command = new Command();
 const projectPath: string = path.resolve(__dirname, "..");
@@ -23,6 +24,27 @@ const makeCSS: (name: string) => void = (name: string) => {
     } else {
         console.log(`${name.toUpperCase()} already exists.`);
     }
+}
+
+const formatTitle: (title: string) => string = (title: string) => {
+    title = title.charAt(0).toUpperCase() + title.slice(1);
+    let index = title.indexOf("-");
+
+    while (title.indexOf("-") != -1) {
+        title = title.slice(0, index) + " " + title.charAt(index + 1).toUpperCase() + title.slice(index + 2)
+        index = title.indexOf("-", index + 1);
+    }
+
+    return title;
+}
+
+const getDaySuffix: (day: number) => string = (day: number) => {
+    const single = day % 10;
+
+    if (single === 1) return "1st";
+    if (single === 2) return "2nd";
+    if (single === 3) return "3rd";
+    return day + "th";
 }
 
 //Description
@@ -76,13 +98,7 @@ program
             title = options.t ? options.t : filename;
         }
         
-        title = title.charAt(0).toUpperCase() + title.slice(1);
-        let index = title.indexOf("-");
-
-        while (title.indexOf("-") != -1) {
-            title = title.slice(0, index) + " " + title.charAt(index + 1).toUpperCase() + title.slice(index + 2)
-            index = title.indexOf("-", index + 1);
-        }
+        title = formatTitle(title);
         
         /* FORMAT:
         +++
@@ -91,8 +107,12 @@ program
         +++
         */
 
-        const date = new Date();
-        const content = `+++\ntitle = "${title}"\ndate = ${date.getDate()}/${date.getMonth()}/${date.getFullYear()}\n+++`;
+        const date: Date = new Date();
+        const year: number = date.getFullYear();
+        const month: string = date.toLocaleString("default", { month: "long" });
+        const day: string = getDaySuffix(date.getDate());
+
+        const content = `+++\ntitle = "${title}"\ndate = ${month} ${day}, ${year}\n+++`;
 
         if (!fs.existsSync(`${projectPath}/content/markdown/${filename}.md`)) {
             fs.writeFile(`${projectPath}/content/markdown/${filename}.md`, content, err => {
@@ -107,6 +127,77 @@ program
 //make-html command
 program
     .command("make-html")
-    .description("Calico turning markdown files to HTML.")
+    .description("Calico turning all markdown files to HTML.")
+    .action(() => {
+        const dir: fs.Dir = fs.opendirSync(`${projectPath}/content/markdown`);
+        let title: string = "", date: string = "", current: any = undefined;
+
+        while ((current = dir.readSync()) !== null) {
+            let body: string = "";
+            const indent: string = "\n                ";
+            const rl: readline.Interface = readline.createInterface({
+                input: fs.createReadStream(`${projectPath}/content/markdown/${current.name}`)
+            });
+
+            const lines: string[] = fs.readFileSync(`${projectPath}/content/markdown/${current.name}`, "utf8").split("\n");
+            //console.log(lines)
+            for (let i: number = 1; i < lines.length; i++) {
+                if (lines[i] == "+++") continue;
+
+                if (lines[i].indexOf("title") === 0) {
+                    title = lines[i].substring(9, lines[i].length - 1);
+                    body += `<h1>${title}</h1>${indent}`;
+                } else if (lines[i].indexOf("date") === 0) {
+                    date = lines[i].substring(7, lines[i].length);
+                    body += `<time>${date}</time>${indent}`;
+                } else if (lines[i].indexOf("##") === 0) {
+                    let count: number = 2;
+
+                    //h2 to h6 tags, hence j < 7
+                    for (let j = 2; j < 7; j++) {
+                        if (lines[i][j] === "#") count++;
+                        else break;
+                    }
+
+                    if (lines[i][count] === " ") {
+                        body += `<h${count}>${lines[i].substring(count + 1)}</h${count}>${indent}`;
+                    } else {
+                        body += `<p>${lines[i]}</p>${indent}`;
+                    }
+                } else if (lines[i].indexOf("- ") === 0) {
+                    let nextIndex: number = 0;
+
+                    body += `<ul>${indent}`;
+                    body += `<li>${lines[i].substring(2)}</li>${indent}`;
+
+                    while (lines[i + 1].indexOf("- ") === 0) {
+                        i++;
+                        body += `<li>${lines[i].substring(2)}</li>${indent}`;
+                    }
+
+
+                    body += `</ul>${indent}`;
+                }
+            }
+
+            const content: string = ` 
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>${title}</title>
+            </head>
+            <body>
+                ${body}
+            </body>
+            </html>`   
+
+            console.log(content)
+        }
+
+        
+        
+    });
 
 program.parse();
