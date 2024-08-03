@@ -4,8 +4,8 @@ The heading of the markdown contains basic information about your file. It occup
 
 ```txt
 +++
-title = "First Post"
-date = 29/6/2024
+title = "First CLI Post"
+date = July 30th, 2024
 +++
 ```
 

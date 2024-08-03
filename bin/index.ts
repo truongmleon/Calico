@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
 
+const indent: string = "\n                ";
 const program: Command = new Command();
 const projectPath: string = path.resolve(__dirname, "..");
 
@@ -47,6 +48,25 @@ const getDaySuffix: (day: number) => string = (day: number) => {
     return day + "th";
 }
 
+const getheaderTag: (text: string) => string = (text: string) => {
+    let body: string = "";
+    let count: number = 2;
+
+    //h2 to h6 tags, hence j < 7
+    for (let j = 2; j < 7; j++) {
+        if (text[j] === "#") count++;
+        else break;
+    }
+
+    if (text[count] === " ") {
+        body += `<h${count}>${text.substring(count + 1)}</h${count}>${indent}`;
+    } else {
+        body += `<p>${text}</p>${indent}`;
+    }
+
+    return body;
+}
+
 const repeatTag: (tag: string, level: number) => string[] = (tag: string, level: number) => {
     let body: string = "";
     let whitespace = ""
@@ -56,10 +76,29 @@ const repeatTag: (tag: string, level: number) => string[] = (tag: string, level:
     }
 
     for (let i = 0; i < level; i++) {
-        body += `${whitespace}   ${tag}\n                `;
+        body += `${whitespace}   ${tag}${indent}`;
     }
 
     return [body, whitespace];
+}
+
+const getULListTags: (lines: string[], i: number) => any[] = (lines: string[], i: number) => {
+    let body: string = `<ul>${indent}`;
+
+    while (lines[i + 1].indexOf("- ") != -1) {
+        i++;
+        const index: number = lines[i].indexOf("- ");
+        const level: number = index / 2;
+        const repeats: string[] = repeatTag("<ul>", level)
+
+        body += repeats[0];
+        body += `${repeats[1]}    <li>${lines[i].substring(index + 2)}</li>${indent}`;
+        body += repeatTag("</ul>", level)[0];
+    }
+
+    body += `</ul>${indent}`;
+
+    return [body, i];
 }
 
 //Description
@@ -149,7 +188,6 @@ program
 
         while ((current = dir.readSync()) !== null) {
             let body: string = "";
-            const indent: string = "\n                ";
 
             const lines: string[] = fs.readFileSync(`${projectPath}/content/markdown/${current.name}`, "utf8").split("\n");
 
@@ -163,40 +201,21 @@ program
                     date = lines[i].substring(7, lines[i].length);
                     body += `<time>${date}</time>${indent}`;
                 } else if (lines[i].indexOf("##") === 0) {
-                    let count: number = 2;
-
-                    //h2 to h6 tags, hence j < 7
-                    for (let j = 2; j < 7; j++) {
-                        if (lines[i][j] === "#") count++;
-                        else break;
-                    }
-
-                    if (lines[i][count] === " ") {
-                        body += `<h${count}>${lines[i].substring(count + 1)}</h${count}>${indent}`;
-                    } else {
-                        body += `<p>${lines[i]}</p>${indent}`;
-                    }
+                    body += getheaderTag(lines[i]);
                 } else if (lines[i].indexOf("- ") === 0) {
-                    i--;
-                    body += `<ul>${indent}`;
-
-                    if (lines[i + 1].indexOf("- [ ]") != -1 || lines[i + 1].toLowerCase().indexOf("- [x]") != -1) {
-                        
+                    if (lines[i].indexOf("- [ ]") !== -1) {
+                        body += `<p>${indent}   <input type="checkbox">    ${indent}    ${lines[i].substring(6)}${indent}</p>${indent}`
+                        continue;
+                    } else if (lines[i].toLowerCase().indexOf("- [x]") !== -1) {
+                        body += `<p>${indent}   <input type="checkbox" checked>    ${indent}    ${lines[i].substring(6)}${indent}</p>${indent}`
                         continue;
                     }
 
-                    while (lines[i + 1].indexOf("- ") != -1) {
-                        i++;
-                        const index: number = lines[i].indexOf("- ");
-                        const level: number = index / 2;
-                        const repeats: string[] = repeatTag("<ul>", level)
-
-                        body += repeats[0];
-                        body += `${repeats[1]}    <li>${lines[i].substring(index + 2)}</li>${indent}`;
-                        body += repeatTag("</ul>", level)[0];
-                    }
-
-                    body += `</ul>${indent}`;
+                    const listTags = getULListTags(lines, --i);
+                    body += listTags[0];
+                    i = listTags[1];
+                } else if (lines[i].indexOf("```") === 0) {
+                    
                 }
             }
 

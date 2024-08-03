@@ -4,6 +4,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var commander_1 = require("commander");
 var fs = require("node:fs");
 var path = require("node:path");
+var indent = "\n                ";
 var program = new commander_1.Command();
 var projectPath = path.resolve(__dirname, "..");
 var makeCSS = function (name) {
@@ -44,6 +45,24 @@ var getDaySuffix = function (day) {
         return "3rd";
     return day + "th";
 };
+var getheaderTag = function (text) {
+    var body = "";
+    var count = 2;
+    //h2 to h6 tags, hence j < 7
+    for (var j = 2; j < 7; j++) {
+        if (text[j] === "#")
+            count++;
+        else
+            break;
+    }
+    if (text[count] === " ") {
+        body += "<h".concat(count, ">").concat(text.substring(count + 1), "</h").concat(count, ">").concat(indent);
+    }
+    else {
+        body += "<p>".concat(text, "</p>").concat(indent);
+    }
+    return body;
+};
 var repeatTag = function (tag, level) {
     var body = "";
     var whitespace = "";
@@ -51,9 +70,23 @@ var repeatTag = function (tag, level) {
         whitespace += "    ";
     }
     for (var i = 0; i < level; i++) {
-        body += "".concat(whitespace, "   ").concat(tag, "\n                ");
+        body += "".concat(whitespace, "   ").concat(tag).concat(indent);
     }
     return [body, whitespace];
+};
+var getULListTags = function (lines, i) {
+    var body = "<ul>".concat(indent);
+    while (lines[i + 1].indexOf("- ") != -1) {
+        i++;
+        var index = lines[i].indexOf("- ");
+        var level = index / 2;
+        var repeats = repeatTag("<ul>", level);
+        body += repeats[0];
+        body += "".concat(repeats[1], "    <li>").concat(lines[i].substring(index + 2), "</li>").concat(indent);
+        body += repeatTag("</ul>", level)[0];
+    }
+    body += "</ul>".concat(indent);
+    return [body, i];
 };
 //Description
 program
@@ -134,7 +167,6 @@ program
     var title = "", date = "", current = undefined;
     while ((current = dir.readSync()) !== null) {
         var body = "";
-        var indent = "\n                ";
         var lines = fs.readFileSync("".concat(projectPath, "/content/markdown/").concat(current.name), "utf8").split("\n");
         for (var i = 1; i < lines.length; i++) {
             if (lines[i] == "+++")
@@ -148,37 +180,22 @@ program
                 body += "<time>".concat(date, "</time>").concat(indent);
             }
             else if (lines[i].indexOf("##") === 0) {
-                var count = 2;
-                //h2 to h6 tags, hence j < 7
-                for (var j = 2; j < 7; j++) {
-                    if (lines[i][j] === "#")
-                        count++;
-                    else
-                        break;
-                }
-                if (lines[i][count] === " ") {
-                    body += "<h".concat(count, ">").concat(lines[i].substring(count + 1), "</h").concat(count, ">").concat(indent);
-                }
-                else {
-                    body += "<p>".concat(lines[i], "</p>").concat(indent);
-                }
+                body += getheaderTag(lines[i]);
             }
             else if (lines[i].indexOf("- ") === 0) {
-                i--;
-                body += "<ul>".concat(indent);
-                if (lines[i + 1].indexOf("- [ ]") != -1 || lines[i + 1].toLowerCase().indexOf("- [x]") != -1) {
+                if (lines[i].indexOf("- [ ]") !== -1) {
+                    body += "<p>".concat(indent, "   <input type=\"checkbox\">    ").concat(indent, "    ").concat(lines[i].substring(6)).concat(indent, "</p>").concat(indent);
                     continue;
                 }
-                while (lines[i + 1].indexOf("- ") != -1) {
-                    i++;
-                    var index = lines[i].indexOf("- ");
-                    var level = index / 2;
-                    var repeats = repeatTag("<ul>", level);
-                    body += repeats[0];
-                    body += "".concat(repeats[1], "    <li>").concat(lines[i].substring(index + 2), "</li>").concat(indent);
-                    body += repeatTag("</ul>", level)[0];
+                else if (lines[i].toLowerCase().indexOf("- [x]") !== -1) {
+                    body += "<p>".concat(indent, "   <input type=\"checkbox\" checked>    ").concat(indent, "    ").concat(lines[i].substring(6)).concat(indent, "</p>").concat(indent);
+                    continue;
                 }
-                body += "</ul>".concat(indent);
+                var listTags = getULListTags(lines, --i);
+                body += listTags[0];
+                i = listTags[1];
+            }
+            else if (lines[i].indexOf("```") === 0) {
             }
         }
         var content = " \n            <!DOCTYPE html>\n            <html lang=\"en\">\n            <head>\n                <meta charset=\"UTF-8\">\n                <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n                <title>".concat(title, "</title>\n            </head>\n            <body>\n                ").concat(body, "\n            </body>\n            </html>");
