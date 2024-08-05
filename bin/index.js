@@ -76,8 +76,7 @@ var repeatTag = function (tag, level) {
 };
 var getULListTags = function (lines, i) {
     var body = "<ul>".concat(indent);
-    while (lines[i + 1].indexOf("- ") != -1) {
-        i++;
+    while (lines[++i].indexOf("- ") != -1) {
         var index = lines[i].indexOf("- ");
         var level = index / 2;
         var repeats = repeatTag("<ul>", level);
@@ -166,8 +165,8 @@ program
     var dir = fs.opendirSync("".concat(projectPath, "/content/markdown"));
     var title = "", date = "", current = undefined;
     while ((current = dir.readSync()) !== null) {
-        var body = "";
         var lines = fs.readFileSync("".concat(projectPath, "/content/markdown/").concat(current.name), "utf8").split("\n");
+        var body = "";
         for (var i = 1; i < lines.length; i++) {
             if (lines[i] == "+++")
                 continue;
@@ -196,6 +195,20 @@ program
                 i = listTags[1];
             }
             else if (lines[i].indexOf("```") === 0) {
+                var language = lines[i].substring(lines[i].indexOf("```") + 3);
+                var lineCount = 0;
+                var codeBody = "<code data-lang=\"".concat(language, "\">").concat(indent);
+                while (lines[++i] !== "```") {
+                    codeBody += "   " + lines[i] + indent;
+                    lineCount++;
+                }
+                codeBody += "</code>";
+                if (lineCount > 1) {
+                    body += "<pre>".concat(codeBody, "</pre>").concat(indent);
+                }
+                else {
+                    body += codeBody + indent;
+                }
             }
         }
         var content = " \n            <!DOCTYPE html>\n            <html lang=\"en\">\n            <head>\n                <meta charset=\"UTF-8\">\n                <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n                <title>".concat(title, "</title>\n            </head>\n            <body>\n                ").concat(body, "\n            </body>\n            </html>");

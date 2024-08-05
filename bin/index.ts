@@ -85,8 +85,7 @@ const repeatTag: (tag: string, level: number) => string[] = (tag: string, level:
 const getULListTags: (lines: string[], i: number) => any[] = (lines: string[], i: number) => {
     let body: string = `<ul>${indent}`;
 
-    while (lines[i + 1].indexOf("- ") != -1) {
-        i++;
+    while (lines[++i].indexOf("- ") != -1) {
         const index: number = lines[i].indexOf("- ");
         const level: number = index / 2;
         const repeats: string[] = repeatTag("<ul>", level)
@@ -99,6 +98,22 @@ const getULListTags: (lines: string[], i: number) => any[] = (lines: string[], i
     body += `</ul>${indent}`;
 
     return [body, i];
+}
+
+const getCodeTags: (lines: string[], i: number) => any[] = (lines: string[], i: number) => {
+    const language = lines[i].substring(lines[i].indexOf("```") + 3);
+    let lineCount: number = 0;
+    let codeBody: string = `<code data-lang="${language}">${indent}`;
+    
+    while (lines[++i] !== "```") {
+        codeBody += "   " + lines[i] + indent;
+        lineCount++;
+    }
+
+    codeBody += `</code>`;
+    
+    if (lineCount > 1) return [`<pre>${codeBody}</pre>${indent}`, i];
+    return [codeBody + indent, i];
 }
 
 //Description
@@ -187,9 +202,8 @@ program
         let title: string = "", date: string = "", current: any = undefined;
 
         while ((current = dir.readSync()) !== null) {
-            let body: string = "";
-
             const lines: string[] = fs.readFileSync(`${projectPath}/content/markdown/${current.name}`, "utf8").split("\n");
+            let body: string = "";
 
             for (let i: number = 1; i < lines.length; i++) {
                 if (lines[i] == "+++") continue;
@@ -215,7 +229,9 @@ program
                     body += listTags[0];
                     i = listTags[1];
                 } else if (lines[i].indexOf("```") === 0) {
-                    
+                    const codeTags = getCodeTags(lines, i);
+                    body += codeTags[0];
+                    i = codeTags[1];
                 }
             }
 
