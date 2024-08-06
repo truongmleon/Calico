@@ -232,7 +232,7 @@ program
                     const codeTags = getCodeTags(lines, i);
                     body += codeTags[0];
                     i = codeTags[1];
-                }
+                } 
             }
 
             const content: string = ` 

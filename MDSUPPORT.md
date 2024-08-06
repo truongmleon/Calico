@@ -9,7 +9,7 @@ date = July 30th, 2024
 +++
 ```
 
-Other headings (no ```h1```):
+Other headings (no ```h1``` since ```h1``` was used from the title):
 
 ```md
 ## Heading 2
