@@ -87,6 +87,16 @@ var getULListTags = function (lines, i) {
     body += "</ul>".concat(indent);
     return [body, i];
 };
+var getOLListTags = function (lines, i) {
+    var body = "<ol>".concat(indent);
+    var count = 1;
+    while (lines[++i].indexOf("".concat(count, ". ")) === 0) {
+        body += "<li>".concat(lines[i].substring(3), "</li>").concat(indent);
+        count++;
+    }
+    body += "</ol>".concat(indent);
+    return [body, i];
+};
 var getCodeTags = function (lines, i) {
     var language = lines[i].substring(lines[i].indexOf("```") + 3);
     var lineCount = 0;
@@ -209,6 +219,9 @@ program
                 i = listTags[1];
             }
             else if (lines[i].indexOf("1. ") === 0) {
+                var listTags = getOLListTags(lines, --i);
+                body += listTags[0];
+                i = listTags[1];
             }
             else if (lines[i].indexOf("```") === 0) {
                 var codeTags = getCodeTags(lines, i);

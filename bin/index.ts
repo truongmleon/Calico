@@ -100,6 +100,20 @@ const getULListTags: (lines: string[], i: number) => any[] = (lines: string[], i
     return [body, i];
 }
 
+const getOLListTags: (lines: string[], i: number) => any[] = (lines: string[], i: number) => {
+    let body: string = `<ol>${indent}`;
+    let count = 1;
+
+    while (lines[++i].indexOf(`${count}. `) === 0) {
+        body += `<li>${lines[i].substring(3)}</li>${indent}`;
+        count++;
+    }
+
+    body += `</ol>${indent}`;
+
+    return [body, i];
+}
+
 const getCodeTags: (lines: string[], i: number) => any[] = (lines: string[], i: number) => {
     const language = lines[i].substring(lines[i].indexOf("```") + 3);
     let lineCount: number = 0;
@@ -232,7 +246,9 @@ program
                     body += listTags[0];
                     i = listTags[1];
                 } else if (lines[i].indexOf("1. ") === 0) {
-                    
+                    const listTags = getOLListTags(lines, --i);
+                    body += listTags[0];
+                    i = listTags[1];
                 } else if (lines[i].indexOf("```") === 0) {
                     const codeTags = getCodeTags(lines, i);
                     body += codeTags[0];
