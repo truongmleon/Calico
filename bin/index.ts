@@ -220,10 +220,10 @@ program
                 } else if (lines[i].indexOf("> ") === 0) { 
                     body += `<blockquote>${lines[i].substring(2)}</blockquote>${indent}`;
                 } else if (lines[i].indexOf("- ") === 0) {
-                    if (lines[i].indexOf("- [ ]") !== -1) {
+                    if (lines[i].indexOf("[ ]") === 2) {
                         body += `<p>${indent}   <input type="checkbox">    ${indent}    ${lines[i].substring(6)}${indent}</p>${indent}`
                         continue;
-                    } else if (lines[i].toLowerCase().indexOf("- [x]") !== -1) {
+                    } else if (lines[i].toLowerCase().indexOf("[x]") == 2) {
                         body += `<p>${indent}   <input type="checkbox" checked>    ${indent}    ${lines[i].substring(6)}${indent}</p>${indent}`
                         continue;
                     }
@@ -232,10 +232,8 @@ program
                     body += listTags[0];
                     i = listTags[1];
                 } else if (lines[i].indexOf("1. ") === 0) {
-
-                }
-                
-                else if (lines[i].indexOf("```") === 0) {
+                    
+                } else if (lines[i].indexOf("```") === 0) {
                     const codeTags = getCodeTags(lines, i);
                     body += codeTags[0];
                     i = codeTags[1];

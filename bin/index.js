@@ -196,11 +196,11 @@ program
                 body += "<blockquote>".concat(lines[i].substring(2), "</blockquote>").concat(indent);
             }
             else if (lines[i].indexOf("- ") === 0) {
-                if (lines[i].indexOf("- [ ]") !== -1) {
+                if (lines[i].indexOf("[ ]") === 2) {
                     body += "<p>".concat(indent, "   <input type=\"checkbox\">    ").concat(indent, "    ").concat(lines[i].substring(6)).concat(indent, "</p>").concat(indent);
                     continue;
                 }
-                else if (lines[i].toLowerCase().indexOf("- [x]") !== -1) {
+                else if (lines[i].toLowerCase().indexOf("[x]") == 2) {
                     body += "<p>".concat(indent, "   <input type=\"checkbox\" checked>    ").concat(indent, "    ").concat(lines[i].substring(6)).concat(indent, "</p>").concat(indent);
                     continue;
                 }
