@@ -198,24 +198,27 @@ program
     .command("make-html")
     .description("Calico turning all markdown files to HTML.")
     .action(() => {
+        // Opens markdown folder to convert all markdown files
         const dir: fs.Dir = fs.opendirSync(`${projectPath}/content/markdown`);
-        let title: string = "", date: string = "", current: any = undefined;
+        let current: any = undefined;
 
+        // While there's still markdown files to convert
         while ((current = dir.readSync()) !== null) {
             const lines: string[] = fs.readFileSync(`${projectPath}/content/markdown/${current.name}`, "utf8").split("\n");
             let body: string = "";
+            let title: string = lines[1].substring(9, lines[1].length - 1);
+            let date: string = lines[2].substring(7, lines[2].length);
 
-            for (let i: number = 1; i < lines.length; i++) {
-                if (lines[i] == "+++") continue;
+            body += `<h1>${title}</h1>${indent}`;
+            body += `<time>${date}</time>${indent}`;
 
-                if (lines[i].indexOf("title") === 0) {
-                    title = lines[i].substring(9, lines[i].length - 1);
-                    body += `<h1>${title}</h1>${indent}`;
-                } else if (lines[i].indexOf("date") === 0) {
-                    date = lines[i].substring(7, lines[i].length);
-                    body += `<time>${date}</time>${indent}`;
-                } else if (lines[i].indexOf("##") === 0) {
+            for (let i: number = 4; i < lines.length; i++) {
+                if (lines[i].indexOf("<!--") == 0 && lines[i].indexOf("-->") != -1) continue;
+
+                if (lines[i].indexOf("##") === 0) {
                     body += getheaderTag(lines[i]);
+                } else if (lines[i].indexOf("> ") === 0) { 
+                    body += `<blockquote>${lines[i].substring(2)}</blockquote>${indent}`;
                 } else if (lines[i].indexOf("- ") === 0) {
                     if (lines[i].indexOf("- [ ]") !== -1) {
                         body += `<p>${indent}   <input type="checkbox">    ${indent}    ${lines[i].substring(6)}${indent}</p>${indent}`
@@ -228,7 +231,11 @@ program
                     const listTags = getULListTags(lines, --i);
                     body += listTags[0];
                     i = listTags[1];
-                } else if (lines[i].indexOf("```") === 0) {
+                } else if (lines[i].indexOf("1. ") === 0) {
+
+                }
+                
+                else if (lines[i].indexOf("```") === 0) {
                     const codeTags = getCodeTags(lines, i);
                     body += codeTags[0];
                     i = codeTags[1];
@@ -251,7 +258,6 @@ program
             console.log(content)
         }
 
-        
         
     });
 

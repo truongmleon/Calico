@@ -87,6 +87,19 @@ var getULListTags = function (lines, i) {
     body += "</ul>".concat(indent);
     return [body, i];
 };
+var getCodeTags = function (lines, i) {
+    var language = lines[i].substring(lines[i].indexOf("```") + 3);
+    var lineCount = 0;
+    var codeBody = "<code data-lang=\"".concat(language, "\">").concat(indent);
+    while (lines[++i] !== "```") {
+        codeBody += "   " + lines[i] + indent;
+        lineCount++;
+    }
+    codeBody += "</code>";
+    if (lineCount > 1)
+        return ["<pre>".concat(codeBody, "</pre>").concat(indent), i];
+    return [codeBody + indent, i];
+};
 //Description
 program
     .name("calico")
@@ -162,24 +175,25 @@ program
     .command("make-html")
     .description("Calico turning all markdown files to HTML.")
     .action(function () {
+    // Opens markdown folder to convert all markdown files
     var dir = fs.opendirSync("".concat(projectPath, "/content/markdown"));
-    var title = "", date = "", current = undefined;
+    var current = undefined;
+    // While there's still markdown files to convert
     while ((current = dir.readSync()) !== null) {
         var lines = fs.readFileSync("".concat(projectPath, "/content/markdown/").concat(current.name), "utf8").split("\n");
         var body = "";
-        for (var i = 1; i < lines.length; i++) {
-            if (lines[i] == "+++")
+        var title = lines[1].substring(9, lines[1].length - 1);
+        var date = lines[2].substring(7, lines[2].length);
+        body += "<h1>".concat(title, "</h1>").concat(indent);
+        body += "<time>".concat(date, "</time>").concat(indent);
+        for (var i = 4; i < lines.length; i++) {
+            if (lines[i].indexOf("<!--") == 0 && lines[i].indexOf("-->") != -1)
                 continue;
-            if (lines[i].indexOf("title") === 0) {
-                title = lines[i].substring(9, lines[i].length - 1);
-                body += "<h1>".concat(title, "</h1>").concat(indent);
-            }
-            else if (lines[i].indexOf("date") === 0) {
-                date = lines[i].substring(7, lines[i].length);
-                body += "<time>".concat(date, "</time>").concat(indent);
-            }
-            else if (lines[i].indexOf("##") === 0) {
+            if (lines[i].indexOf("##") === 0) {
                 body += getheaderTag(lines[i]);
+            }
+            else if (lines[i].indexOf("> ") === 0) {
+                body += "<blockquote>".concat(lines[i].substring(2), "</blockquote>").concat(indent);
             }
             else if (lines[i].indexOf("- ") === 0) {
                 if (lines[i].indexOf("- [ ]") !== -1) {
@@ -194,21 +208,12 @@ program
                 body += listTags[0];
                 i = listTags[1];
             }
+            else if (lines[i].indexOf("1. ") === 0) {
+            }
             else if (lines[i].indexOf("```") === 0) {
-                var language = lines[i].substring(lines[i].indexOf("```") + 3);
-                var lineCount = 0;
-                var codeBody = "<code data-lang=\"".concat(language, "\">").concat(indent);
-                while (lines[++i] !== "```") {
-                    codeBody += "   " + lines[i] + indent;
-                    lineCount++;
-                }
-                codeBody += "</code>";
-                if (lineCount > 1) {
-                    body += "<pre>".concat(codeBody, "</pre>").concat(indent);
-                }
-                else {
-                    body += codeBody + indent;
-                }
+                var codeTags = getCodeTags(lines, i);
+                body += codeTags[0];
+                i = codeTags[1];
             }
         }
         var content = " \n            <!DOCTYPE html>\n            <html lang=\"en\">\n            <head>\n                <meta charset=\"UTF-8\">\n                <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n                <title>".concat(title, "</title>\n            </head>\n            <body>\n                ").concat(body, "\n            </body>\n            </html>");
