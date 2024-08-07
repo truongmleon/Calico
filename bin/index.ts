@@ -2,11 +2,20 @@
 import { Command } from "commander";
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as readline from 'node:readline';
+
+declare global {
+    interface String {
+      replaceAt: (index: number, replacement: string) => string;
+    }
+}
 
 const indent: string = "\n                ";
 const program: Command = new Command();
 const projectPath: string = path.resolve(__dirname, "..");
+
+String.prototype.replaceAt = function (index: number, replacement: string): string {
+    return this.substring(0, index) + replacement + this.substring(index + 1);
+}
 
 const makeCSS: (name: string) => void = (name: string) => {
     if (!fs.existsSync(`${projectPath}/assets/styles`)) {
@@ -48,6 +57,21 @@ const getDaySuffix: (day: number) => string = (day: number) => {
     return day + "th";
 }
 
+const repeatTag: (tag: string, level: number) => string[] = (tag: string, level: number) => {
+    let body: string = "";
+    let whitespace = ""
+
+    for (let i = 0; i < level - 1; i++) {
+        whitespace += "    ";
+    }
+
+    for (let i = 0; i < level; i++) {
+        body += `${whitespace}   ${tag}${indent}`;
+    }
+
+    return [body, whitespace];
+}
+
 const getheaderTag: (text: string) => string = (text: string) => {
     let body: string = "";
     let count: number = 2;
@@ -65,21 +89,6 @@ const getheaderTag: (text: string) => string = (text: string) => {
     }
 
     return body;
-}
-
-const repeatTag: (tag: string, level: number) => string[] = (tag: string, level: number) => {
-    let body: string = "";
-    let whitespace = ""
-
-    for (let i = 0; i < level - 1; i++) {
-        whitespace += "    ";
-    }
-
-    for (let i = 0; i < level; i++) {
-        body += `${whitespace}   ${tag}${indent}`;
-    }
-
-    return [body, whitespace];
 }
 
 const getULListTags: (lines: string[], i: number) => any[] = (lines: string[], i: number) => {
@@ -128,6 +137,24 @@ const getCodeTags: (lines: string[], i: number) => any[] = (lines: string[], i: 
     
     if (lineCount > 1) return [`<pre>${codeBody}</pre>${indent}`, i];
     return [codeBody + indent, i];
+}
+
+const addEMTag: (text: string) => string = (text: string) => {
+    if (text.indexOf("*") === -1) return text;
+    
+    let indexOfFirstItalic: number = text.indexOf("*");
+    let indexOfLastItalic: number = text.indexOf("*", indexOfFirstItalic + 1);
+
+    while (indexOfLastItalic !== -1) {
+        text = text.replaceAt(indexOfFirstItalic, "<em>");
+        text = text.replaceAt(indexOfLastItalic + 3, "</em>");
+
+        indexOfFirstItalic = text.indexOf("*", indexOfLastItalic + 1);
+        if (indexOfFirstItalic == -1) break;
+        indexOfLastItalic = text.indexOf("*", indexOfFirstItalic + 1);
+    }
+
+    return text;
 }
 
 //Description
@@ -253,7 +280,15 @@ program
                     const codeTags = getCodeTags(lines, i);
                     body += codeTags[0];
                     i = codeTags[1];
-                } 
+                } else {
+                    /*
+                    Paragraph tags 
+                    */
+
+                    if (lines[i] == "Hello *EMP* bruh") {
+                        console.log(addEMTag(lines[i]))
+                    }
+                }
             }
 
             const content: string = ` 
