@@ -96,7 +96,7 @@ var getOLListTags = function (lines, i) {
     var body = "<ol>".concat(indent);
     var count = 1;
     while (lines[++i].indexOf("".concat(count, ". ")) === 0) {
-        body += "<li>".concat(lines[i].substring(3), "</li>").concat(indent);
+        body += "   <li>".concat(lines[i].substring(3), "</li>").concat(indent);
         count++;
     }
     body += "</ol>".concat(indent);
@@ -116,6 +116,14 @@ var getCodeTags = function (lines, i) {
     if (lineCount > 1)
         return ["<pre>".concat(codeBody, "</pre>").concat(indent), i];
     return [codeBody + indent, i];
+};
+var getPlainHTML = function (lines, i) {
+    var body = "";
+    while (lines[++i].indexOf("</") !== 0 && lines[i].indexOf(">") !== lines[i].length - 1) {
+        body += "   " + lines[i] + indent;
+    }
+    body += lines[i] + indent;
+    return [body, i];
 };
 var addSpecialTag = function (text, check, tag) {
     if (text.indexOf(check) === -1)
@@ -228,7 +236,8 @@ program
         var title = lines[1].substring(9, lines[1].length - 1);
         var date = lines[2].substring(7, lines[2].length);
         body += "<h1>".concat(checkEmphasis(title), "</h1>").concat(indent);
-        body += "<time>".concat(checkEmphasis(date), "</time>").concat(indent);
+        if (date !== "")
+            body += "<time>".concat(checkEmphasis(date), "</time>").concat(indent);
         for (var i = 4; i < lines.length; i++) {
             var currentLine = lines[i];
             if (currentLine.indexOf("<!--") == 0 && currentLine.indexOf("-->") != -1)
@@ -261,6 +270,15 @@ program
                 var codeTags = getCodeTags(lines, i);
                 body += codeTags[0];
                 i = codeTags[1];
+            }
+            else if (currentLine.indexOf("<") === 0 && currentLine.indexOf("/>") === currentLine.length - 2) {
+                body += currentLine + indent;
+            }
+            else if (currentLine.indexOf("<") === 0 && currentLine.indexOf(">") === currentLine.length - 1) {
+                body += currentLine + indent;
+                var plainHTML = getPlainHTML(lines, i);
+                body += plainHTML[0];
+                i = plainHTML[1];
             }
             else {
                 /*
