@@ -75,6 +75,7 @@ const repeatTag: (tag: string, level: number) => string[] = (tag: string, level:
 const getheaderTag: (text: string) => string = (text: string) => {
     let body: string = "";
     let count: number = 2;
+    text = checkEmphasis(text);
 
     //h2 to h6 tags, hence j < 7
     for (let j = 2; j < 7; j++) {
@@ -105,6 +106,7 @@ const getULListTags: (lines: string[], i: number) => any[] = (lines: string[], i
     }
 
     body += `</ul>${indent}`;
+    body = checkEmphasis(body);
 
     return [body, i];
 }
@@ -119,6 +121,7 @@ const getOLListTags: (lines: string[], i: number) => any[] = (lines: string[], i
     }
 
     body += `</ol>${indent}`;
+    body = checkEmphasis(body);
 
     return [body, i];
 }
@@ -134,6 +137,7 @@ const getCodeTags: (lines: string[], i: number) => any[] = (lines: string[], i: 
     }
 
     codeBody += `</code>`;
+    codeBody = checkEmphasis(codeBody);
     
     if (lineCount > 1) return [`<pre>${codeBody}</pre>${indent}`, i];
     return [codeBody + indent, i];
@@ -164,6 +168,8 @@ const checkEmphasis: (text: string) => string = (text: string) => {
     text = addSpecialTag(text, "**", "strong");
     text = addSpecialTag(text, "*", "em")
     text = addSpecialTag(text, "~~", "del");
+    text = addSpecialTag(text, "~", "sup");
+    text = addSpecialTag(text, "^", "sub");
 
     return text;
 }
@@ -261,33 +267,34 @@ program
             let title: string = lines[1].substring(9, lines[1].length - 1);
             let date: string = lines[2].substring(7, lines[2].length);
 
-            body += `<h1>${title}</h1>${indent}`;
-            body += `<time>${date}</time>${indent}`;
+            body += `<h1>${checkEmphasis(title)}</h1>${indent}`;
+            body += `<time>${checkEmphasis(date)}</time>${indent}`;
 
             for (let i: number = 4; i < lines.length; i++) {
-                if (lines[i].indexOf("<!--") == 0 && lines[i].indexOf("-->") != -1) continue;
+                let currentLine = lines[i];
+                if (currentLine.indexOf("<!--") == 0 && currentLine.indexOf("-->") != -1) continue;
 
-                if (lines[i].indexOf("##") === 0) {
-                    body += getheaderTag(lines[i]);
-                } else if (lines[i].indexOf("> ") === 0) { 
-                    body += `<blockquote>${lines[i].substring(2)}</blockquote>${indent}`;
-                } else if (lines[i].indexOf("- ") === 0) {
-                    if (lines[i].indexOf("[ ]") === 2) {
-                        body += `<p>${indent}   <input type="checkbox">    ${indent}    ${lines[i].substring(6)}${indent}</p>${indent}`
+                if (currentLine.indexOf("##") === 0) {
+                    body += getheaderTag(currentLine);
+                } else if (currentLine.indexOf("> ") === 0) { 
+                    body += `<blockquote>${checkEmphasis(currentLine.substring(2))}</blockquote>${indent}`;
+                } else if (currentLine.indexOf("- ") === 0) {
+                    if (currentLine.indexOf("[ ]") === 2) {
+                        body += `<p>${indent}   <input type="checkbox">    ${indent}    ${checkEmphasis(currentLine.substring(6))}${indent}</p>${indent}`
                         continue;
-                    } else if (lines[i].toLowerCase().indexOf("[x]") == 2) {
-                        body += `<p>${indent}   <input type="checkbox" checked>    ${indent}    ${lines[i].substring(6)}${indent}</p>${indent}`
+                    } else if (currentLine.toLowerCase().indexOf("[x]") == 2) {
+                        body += `<p>${indent}   <input type="checkbox" checked>    ${indent}    ${checkEmphasis(currentLine.substring(6))}${indent}</p>${indent}`
                         continue;
                     }
 
                     const listTags = getULListTags(lines, --i);
                     body += listTags[0];
                     i = listTags[1];
-                } else if (lines[i].indexOf("1. ") === 0) {
+                } else if (currentLine.indexOf("1. ") === 0) {
                     const listTags = getOLListTags(lines, --i);
                     body += listTags[0];
                     i = listTags[1];
-                } else if (lines[i].indexOf("```") === 0) {
+                } else if (currentLine.indexOf("```") === 0) {
                     const codeTags = getCodeTags(lines, i);
                     body += codeTags[0];
                     i = codeTags[1];
@@ -296,7 +303,7 @@ program
                     Paragraph tags 
                     */
 
-                    console.log(checkEmphasis(lines[i]));
+                    console.log(checkEmphasis(currentLine));
                 }
             }
 

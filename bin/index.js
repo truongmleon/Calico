@@ -62,6 +62,7 @@ var repeatTag = function (tag, level) {
 var getheaderTag = function (text) {
     var body = "";
     var count = 2;
+    text = checkEmphasis(text);
     //h2 to h6 tags, hence j < 7
     for (var j = 2; j < 7; j++) {
         if (text[j] === "#")
@@ -88,6 +89,7 @@ var getULListTags = function (lines, i) {
         body += repeatTag("</ul>", level)[0];
     }
     body += "</ul>".concat(indent);
+    body = checkEmphasis(body);
     return [body, i];
 };
 var getOLListTags = function (lines, i) {
@@ -98,6 +100,7 @@ var getOLListTags = function (lines, i) {
         count++;
     }
     body += "</ol>".concat(indent);
+    body = checkEmphasis(body);
     return [body, i];
 };
 var getCodeTags = function (lines, i) {
@@ -109,6 +112,7 @@ var getCodeTags = function (lines, i) {
         lineCount++;
     }
     codeBody += "</code>";
+    codeBody = checkEmphasis(codeBody);
     if (lineCount > 1)
         return ["<pre>".concat(codeBody, "</pre>").concat(indent), i];
     return [codeBody + indent, i];
@@ -135,6 +139,8 @@ var checkEmphasis = function (text) {
     text = addSpecialTag(text, "**", "strong");
     text = addSpecialTag(text, "*", "em");
     text = addSpecialTag(text, "~~", "del");
+    text = addSpecialTag(text, "~", "sup");
+    text = addSpecialTag(text, "^", "sub");
     return text;
 };
 //Description
@@ -221,36 +227,37 @@ program
         var body = "";
         var title = lines[1].substring(9, lines[1].length - 1);
         var date = lines[2].substring(7, lines[2].length);
-        body += "<h1>".concat(title, "</h1>").concat(indent);
-        body += "<time>".concat(date, "</time>").concat(indent);
+        body += "<h1>".concat(checkEmphasis(title), "</h1>").concat(indent);
+        body += "<time>".concat(checkEmphasis(date), "</time>").concat(indent);
         for (var i = 4; i < lines.length; i++) {
-            if (lines[i].indexOf("<!--") == 0 && lines[i].indexOf("-->") != -1)
+            var currentLine = lines[i];
+            if (currentLine.indexOf("<!--") == 0 && currentLine.indexOf("-->") != -1)
                 continue;
-            if (lines[i].indexOf("##") === 0) {
-                body += getheaderTag(lines[i]);
+            if (currentLine.indexOf("##") === 0) {
+                body += getheaderTag(currentLine);
             }
-            else if (lines[i].indexOf("> ") === 0) {
-                body += "<blockquote>".concat(lines[i].substring(2), "</blockquote>").concat(indent);
+            else if (currentLine.indexOf("> ") === 0) {
+                body += "<blockquote>".concat(checkEmphasis(currentLine.substring(2)), "</blockquote>").concat(indent);
             }
-            else if (lines[i].indexOf("- ") === 0) {
-                if (lines[i].indexOf("[ ]") === 2) {
-                    body += "<p>".concat(indent, "   <input type=\"checkbox\">    ").concat(indent, "    ").concat(lines[i].substring(6)).concat(indent, "</p>").concat(indent);
+            else if (currentLine.indexOf("- ") === 0) {
+                if (currentLine.indexOf("[ ]") === 2) {
+                    body += "<p>".concat(indent, "   <input type=\"checkbox\">    ").concat(indent, "    ").concat(checkEmphasis(currentLine.substring(6))).concat(indent, "</p>").concat(indent);
                     continue;
                 }
-                else if (lines[i].toLowerCase().indexOf("[x]") == 2) {
-                    body += "<p>".concat(indent, "   <input type=\"checkbox\" checked>    ").concat(indent, "    ").concat(lines[i].substring(6)).concat(indent, "</p>").concat(indent);
+                else if (currentLine.toLowerCase().indexOf("[x]") == 2) {
+                    body += "<p>".concat(indent, "   <input type=\"checkbox\" checked>    ").concat(indent, "    ").concat(checkEmphasis(currentLine.substring(6))).concat(indent, "</p>").concat(indent);
                     continue;
                 }
                 var listTags = getULListTags(lines, --i);
                 body += listTags[0];
                 i = listTags[1];
             }
-            else if (lines[i].indexOf("1. ") === 0) {
+            else if (currentLine.indexOf("1. ") === 0) {
                 var listTags = getOLListTags(lines, --i);
                 body += listTags[0];
                 i = listTags[1];
             }
-            else if (lines[i].indexOf("```") === 0) {
+            else if (currentLine.indexOf("```") === 0) {
                 var codeTags = getCodeTags(lines, i);
                 body += codeTags[0];
                 i = codeTags[1];
@@ -259,7 +266,7 @@ program
                 /*
                 Paragraph tags
                 */
-                console.log(checkEmphasis(lines[i]));
+                console.log(checkEmphasis(currentLine));
             }
         }
         var content = " \n            <!DOCTYPE html>\n            <html lang=\"en\">\n            <head>\n                <meta charset=\"UTF-8\">\n                <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n                <title>".concat(title, "</title>\n            </head>\n            <body>\n                ").concat(body, "\n            </body>\n            </html>");
