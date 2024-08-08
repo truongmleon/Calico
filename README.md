@@ -1,6 +1,6 @@
 # Calico
 
-Calico is a static-site generator that I made because I'm tired of using the ones already on the internet. I made it so it's the easiest static-site generator you will ever use. Perhaps I'll make some themes too. The plan is to use Calico make blogs and website portfolios.
+Calico is a static-site generator that I made because I'm tired of using the ones already on the internet. I made it so it's the easiest static-site generator you will ever use. Perhaps I'll make some themes too. The plan is to use Calico to make blogs and website portfolios.
 
 ## How to Use Calico
 
