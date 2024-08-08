@@ -7,8 +7,8 @@ var path = require("node:path");
 var indent = "\n                ";
 var program = new commander_1.Command();
 var projectPath = path.resolve(__dirname, "..");
-String.prototype.replaceAt = function (index, replacement) {
-    return this.substring(0, index) + replacement + this.substring(index + 1);
+String.prototype.replaceAt = function (index, replacement, extra) {
+    return this.substring(0, index) + replacement + this.substring(index + extra + 1);
 };
 var makeCSS = function (name) {
     if (!fs.existsSync("".concat(projectPath, "/assets/styles"))) {
@@ -113,19 +113,28 @@ var getCodeTags = function (lines, i) {
         return ["<pre>".concat(codeBody, "</pre>").concat(indent), i];
     return [codeBody + indent, i];
 };
-var addEMTag = function (text) {
-    if (text.indexOf("*") === -1)
+var addSpecialTag = function (text, check, tag) {
+    if (text.indexOf(check) === -1)
         return text;
-    var indexOfFirstItalic = text.indexOf("*");
-    var indexOfLastItalic = text.indexOf("*", indexOfFirstItalic + 1);
-    while (indexOfLastItalic !== -1) {
-        text = text.replaceAt(indexOfFirstItalic, "<em>");
-        text = text.replaceAt(indexOfLastItalic + 3, "</em>");
-        indexOfFirstItalic = text.indexOf("*", indexOfLastItalic + 1);
-        if (indexOfFirstItalic == -1)
+    var checkLength = check.length;
+    var tagLength = tag.length + checkLength % 2;
+    var extra = checkLength - 1; // For extra * in bold text.
+    var indexOfFirst = text.indexOf(check);
+    var indexOfLast = text.indexOf(check, indexOfFirst + checkLength);
+    while (indexOfLast !== -1) {
+        text = text.replaceAt(indexOfFirst, "<".concat(tag, ">"), extra);
+        text = text.replaceAt(indexOfLast + tagLength, "</".concat(tag, ">"), extra);
+        indexOfFirst = text.indexOf(check, indexOfLast + checkLength);
+        if (indexOfFirst == -1)
             break;
-        indexOfLastItalic = text.indexOf("*", indexOfFirstItalic + 1);
+        indexOfLast = text.indexOf(check, indexOfFirst + checkLength);
     }
+    return text;
+};
+var checkEmphasis = function (text) {
+    text = addSpecialTag(text, "**", "strong");
+    text = addSpecialTag(text, "*", "em");
+    text = addSpecialTag(text, "~~", "del");
     return text;
 };
 //Description
@@ -250,9 +259,7 @@ program
                 /*
                 Paragraph tags
                 */
-                if (lines[i] == "Hello *EMP* bruh") {
-                    console.log(addEMTag(lines[i]));
-                }
+                console.log(checkEmphasis(lines[i]));
             }
         }
         var content = " \n            <!DOCTYPE html>\n            <html lang=\"en\">\n            <head>\n                <meta charset=\"UTF-8\">\n                <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n                <title>".concat(title, "</title>\n            </head>\n            <body>\n                ").concat(body, "\n            </body>\n            </html>");

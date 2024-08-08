@@ -5,7 +5,7 @@ import * as path from 'node:path';
 
 declare global {
     interface String {
-      replaceAt: (index: number, replacement: string) => string;
+      replaceAt: (index: number, replacement: string, extra: number) => string;
     }
 }
 
@@ -13,8 +13,8 @@ const indent: string = "\n                ";
 const program: Command = new Command();
 const projectPath: string = path.resolve(__dirname, "..");
 
-String.prototype.replaceAt = function (index: number, replacement: string): string {
-    return this.substring(0, index) + replacement + this.substring(index + 1);
+String.prototype.replaceAt = function (index: number, replacement: string, extra: number): string {
+    return this.substring(0, index) + replacement + this.substring(index + extra + 1);
 }
 
 const makeCSS: (name: string) => void = (name: string) => {
@@ -139,20 +139,31 @@ const getCodeTags: (lines: string[], i: number) => any[] = (lines: string[], i: 
     return [codeBody + indent, i];
 }
 
-const addEMTag: (text: string) => string = (text: string) => {
-    if (text.indexOf("*") === -1) return text;
+const addSpecialTag: (text: string, check: string, tag: string) => string = (text: string, check: string, tag: string) => {
+    if (text.indexOf(check) === -1) return text;
     
-    let indexOfFirstItalic: number = text.indexOf("*");
-    let indexOfLastItalic: number = text.indexOf("*", indexOfFirstItalic + 1);
+    const checkLength = check.length;
+    const tagLength: number = tag.length + checkLength % 2;
+    const extra: number = checkLength - 1; // For extra * in bold text.
+    let indexOfFirst: number = text.indexOf(check);
+    let indexOfLast: number = text.indexOf(check, indexOfFirst + checkLength);
 
-    while (indexOfLastItalic !== -1) {
-        text = text.replaceAt(indexOfFirstItalic, "<em>");
-        text = text.replaceAt(indexOfLastItalic + 3, "</em>");
+    while (indexOfLast !== -1) {
+        text = text.replaceAt(indexOfFirst, `<${tag}>`, extra);
+        text = text.replaceAt(indexOfLast + tagLength, `</${tag}>`, extra);
 
-        indexOfFirstItalic = text.indexOf("*", indexOfLastItalic + 1);
-        if (indexOfFirstItalic == -1) break;
-        indexOfLastItalic = text.indexOf("*", indexOfFirstItalic + 1);
+        indexOfFirst = text.indexOf(check, indexOfLast + checkLength);
+        if (indexOfFirst == -1) break;
+        indexOfLast = text.indexOf(check, indexOfFirst + checkLength);
     }
+
+    return text;
+}
+
+const checkEmphasis: (text: string) => string = (text: string) => {
+    text = addSpecialTag(text, "**", "strong");
+    text = addSpecialTag(text, "*", "em")
+    text = addSpecialTag(text, "~~", "del");
 
     return text;
 }
@@ -285,9 +296,7 @@ program
                     Paragraph tags 
                     */
 
-                    if (lines[i] == "Hello *EMP* bruh") {
-                        console.log(addEMTag(lines[i]))
-                    }
+                    console.log(checkEmphasis(lines[i]));
                 }
             }
 
