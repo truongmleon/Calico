@@ -1,6 +1,8 @@
 # Markdown Support
 
-The heading of the markdown contains basic information about your file. It occupies the first four lines. The title is used as an ```h1``` tag. The date is used in the post as well. The date may be empty, but the title may not.
+The heading of the markdown contains basic information about your file. It occupies the first four lines. The title is used as an ```h1``` tag. The date is used in the post as well with a ```date``` tag. And yes, you may use *, **, etc. in the basic information for emphasis.
+
+Example Usage:
 
 ```txt
 +++
@@ -9,7 +11,25 @@ date = July 30th, 2024
 +++
 ```
 
-Other headings (no ```h1``` since ```h1``` was used from the title):
+Example with Emphasis:
+
+```txt
++++
+title = "First **CLI** ~~News~~ Post"
+date = *July* 30th, 2024
++++
+```
+
+Example with no Information (this is fine, but keep the lines though):
+
+```txt
++++
+title = ""
+date = 
++++
+```
+
+Other Headings (no single ```#``` since ```h1``` (#) was used in the title):
 
 ```md
 ## Heading 2
@@ -21,7 +41,7 @@ Other headings (no ```h1``` since ```h1``` was used from the title):
 
 ### Heading 3
 
-## Basic styling
+## Basic Emphasis
 
 ```md
 **BOLD**
@@ -68,7 +88,7 @@ print("Java sucks!")
 print("Java sucks!")
 ```
 
-## Subscripts and Superscripts
+## Subscript and Superscript
 
 This isn't showing on GitHub, but it does work.
 
@@ -145,9 +165,9 @@ JavaScript[^1].
 ## Comments
 
 ```md
-<!-- COMMENT -->
+<!-- COMMENT ME! -->
 ```
 
 ## HTML
 
-You can write HTML if you would like also. It will be rendered.
+You can write HTML if you would like. It will be rendered.
