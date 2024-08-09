@@ -148,7 +148,7 @@ JavaScript[^1].
 
 [^1]: An OK language.
 
-## Tables
+## Tables (not yet implemented)
 
 ```md
 | Syntax | Description |

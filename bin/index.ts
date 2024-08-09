@@ -274,7 +274,9 @@ program
         // While there's still markdown files to convert
         while ((current = dir.readSync()) !== null) {
             const lines: string[] = fs.readFileSync(`${projectPath}/content/markdown/${current.name}`, "utf8").split("\n");
+            let currentFootnote: number = 1;
             let body: string = "";
+            let footnotes: string = "";
             let title: string = lines[1].substring(9, lines[1].length - 1);
             let date: string = lines[2].substring(7, lines[2].length);
 
@@ -283,7 +285,7 @@ program
 
             for (let i: number = 4; i < lines.length; i++) {
                 let currentLine = lines[i];
-                if (currentLine.indexOf("<!--") == 0 && currentLine.indexOf("-->") != -1) continue;
+                if (currentLine === "" || currentLine.indexOf("<!--") == 0 && currentLine.indexOf("-->") != -1) continue;
 
                 if (currentLine.indexOf("##") === 0) {
                     body += getheaderTag(currentLine);
@@ -309,19 +311,24 @@ program
                     const codeTags = getCodeTags(lines, i);
                     body += codeTags[0];
                     i = codeTags[1];
-                } else if (currentLine.indexOf("<") === 0 && currentLine.indexOf("/>") === currentLine.length - 2) {
-                    body += currentLine + indent;
                 } else if (currentLine.indexOf("<") === 0 && currentLine.indexOf(">") === currentLine.length - 1) {
                     body += currentLine + indent;
                     const plainHTML = getPlainHTML(lines, i);
                     body += plainHTML[0];
                     i = plainHTML[1];
+                } else if (currentLine.indexOf("<") === 0 && currentLine.indexOf("/>") === currentLine.length - 2) {
+                    body += currentLine + indent;
+                } else if (currentLine.indexOf(`[^${currentFootnote}]`) === 0) {
+                    currentLine = currentLine.replaceAt(0, `${currentFootnote}.`, 4);
+                    footnotes += `<p id="#fn${currentFootnote}">${currentLine} <a href="fnote${currentFootnote}">&#8617</a></p>${indent}`;
+                    currentFootnote++;
+                } else if (currentLine.indexOf(`[^${currentFootnote}]`) !== -1) {
+                    const note: string = `<sup><a id="fnote${currentFootnote}" href="#fn${currentFootnote}">[${currentFootnote}]</a></sup>`;
+                    currentLine = currentLine.replaceAt(currentLine.indexOf(`[^${currentFootnote}]`), note, 3);
+                    body += `<p>${currentLine}</p>${indent}`;
                 } else {
-                    /*
-                    Paragraph tags 
-                    */
-
-                    console.log(checkEmphasis(currentLine));
+                    currentLine = checkEmphasis(currentLine);
+                    body += `<p>${checkEmphasis(currentLine)}</p>${indent}`;
                 }
             }
 
@@ -334,7 +341,7 @@ program
                 <title>${title}</title>
             </head>
             <body>
-                ${body}
+                ${body + footnotes}
             </body>
             </html>`   
 
