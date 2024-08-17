@@ -312,8 +312,8 @@ program
                     body += codeTags[0];
                     i = codeTags[1];
                 } else if (currentLine.indexOf("<") === 0 && currentLine.indexOf(">") === currentLine.length - 1) {
-                    body += currentLine + indent;
                     const plainHTML = getPlainHTML(lines, i);
+                    body += currentLine + indent;
                     body += plainHTML[0];
                     i = plainHTML[1];
                 } else if (currentLine.indexOf("<") === 0 && currentLine.indexOf("/>") === currentLine.length - 2) {
@@ -326,7 +326,12 @@ program
                     const note: string = `<sup><a id="fnote${currentFootnote}" href="#fn${currentFootnote}">[${currentFootnote}]</a></sup>`;
                     currentLine = currentLine.replaceAt(currentLine.indexOf(`[^${currentFootnote}]`), note, 3);
                     body += `<p>${currentLine}</p>${indent}`;
-                } else {
+                } else if (currentLine.indexOf("(") !== -1 && currentLine.indexOf(")") !== -1 && currentLine.indexOf("[") !== -1 && currentLine.indexOf("]") !== -1) {
+                        
+                }
+                
+                
+                else {
                     currentLine = checkEmphasis(currentLine);
                     body += `<p>${checkEmphasis(currentLine)}</p>${indent}`;
                 }

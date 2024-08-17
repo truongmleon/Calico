@@ -274,8 +274,8 @@ program
                 i = codeTags[1];
             }
             else if (currentLine.indexOf("<") === 0 && currentLine.indexOf(">") === currentLine.length - 1) {
-                body += currentLine + indent;
                 var plainHTML = getPlainHTML(lines, i);
+                body += currentLine + indent;
                 body += plainHTML[0];
                 i = plainHTML[1];
             }
@@ -291,6 +291,8 @@ program
                 var note = "<sup><a id=\"fnote".concat(currentFootnote, "\" href=\"#fn").concat(currentFootnote, "\">[").concat(currentFootnote, "]</a></sup>");
                 currentLine = currentLine.replaceAt(currentLine.indexOf("[^".concat(currentFootnote, "]")), note, 3);
                 body += "<p>".concat(currentLine, "</p>").concat(indent);
+            }
+            else if (currentLine.indexOf("(") !== -1 && currentLine.indexOf(")") !== -1 && currentLine.indexOf("[") !== -1 && currentLine.indexOf("]") !== -1) {
             }
             else {
                 currentLine = checkEmphasis(currentLine);
