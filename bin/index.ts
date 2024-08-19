@@ -24,18 +24,16 @@ String.prototype.replaceAt = function (index: number, replacement: string, extra
  */
 
 const makeCSS: (name: string) => void = (name: string) => {
-    if (!fs.existsSync(`${projectPath}/assets/styles`)) {
-        fs.mkdirSync(`${projectPath}/assets/styles`);
-    }
+    // Create styles folder if it doesn't exist.
+    if (!fs.existsSync(`${projectPath}/assets/styles`)) fs.mkdirSync(`${projectPath}/assets/styles`);
 
+    // Creates styles file if it doesn't exist.
     if (!fs.existsSync(`${projectPath}/assets/styles/styles.${name}`)) {
         fs.open(`${projectPath}/assets/styles/styles.${name}`, "w", (err, file) => {
             if (err) throw err;
             console.log(`${name.toUpperCase()} is created.`);
     
-            fs.close(file, (err) => {
-                if (err) throw err;
-            });
+            fs.close(file, (err) => {if (err) throw err;});
         });
     } else {
         console.log(`${name.toUpperCase()} already exists.`);
@@ -107,7 +105,7 @@ const repeatTag: (tag: string, level: number) => string[] = (tag: string, level:
  * @returns {string} - Header tag HTML string.
  */
 
-const getheaderTag: (text: string) => string = (text: string) => {
+const getHeaderTag: (text: string) => string = (text: string) => {
     let body: string = "";
     let count: number = 2;
     text = checkEmphasis(text);
@@ -371,7 +369,7 @@ program
                 if (currentLine === "" || currentLine.indexOf("<!--") == 0 && currentLine.indexOf("-->") != -1) continue;
 
                 if (currentLine.indexOf("##") === 0) {
-                    body += getheaderTag(currentLine);
+                    body += getHeaderTag(currentLine);
                 } else if (currentLine.indexOf("> ") === 0) { 
                     body += `<blockquote>${checkEmphasis(currentLine.substring(2))}</blockquote>${indent}`;
                 } else if (currentLine.indexOf("- ") === 0) {

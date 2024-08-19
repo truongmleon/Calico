@@ -16,18 +16,17 @@ String.prototype.replaceAt = function (index, replacement, extra) {
  * @param {string} name - File extension to be used (either CSS or SCSS).
  */
 var makeCSS = function (name) {
-    if (!fs.existsSync("".concat(projectPath, "/assets/styles"))) {
+    // Create styles folder if it doesn't exist.
+    if (!fs.existsSync("".concat(projectPath, "/assets/styles")))
         fs.mkdirSync("".concat(projectPath, "/assets/styles"));
-    }
+    // Creates styles file if it doesn't exist.
     if (!fs.existsSync("".concat(projectPath, "/assets/styles/styles.").concat(name))) {
         fs.open("".concat(projectPath, "/assets/styles/styles.").concat(name), "w", function (err, file) {
             if (err)
                 throw err;
             console.log("".concat(name.toUpperCase(), " is created."));
-            fs.close(file, function (err) {
-                if (err)
-                    throw err;
-            });
+            fs.close(file, function (err) { if (err)
+                throw err; });
         });
     }
     else {
@@ -89,7 +88,7 @@ var repeatTag = function (tag, level) {
  * @param {string} text - Text inside of header.
  * @returns {string} - Header tag HTML string.
  */
-var getheaderTag = function (text) {
+var getHeaderTag = function (text) {
     var body = "";
     var count = 2;
     text = checkEmphasis(text);
@@ -317,7 +316,7 @@ program
             if (currentLine === "" || currentLine.indexOf("<!--") == 0 && currentLine.indexOf("-->") != -1)
                 continue;
             if (currentLine.indexOf("##") === 0) {
-                body += getheaderTag(currentLine);
+                body += getHeaderTag(currentLine);
             }
             else if (currentLine.indexOf("> ") === 0) {
                 body += "<blockquote>".concat(checkEmphasis(currentLine.substring(2)), "</blockquote>").concat(indent);
