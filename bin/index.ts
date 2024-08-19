@@ -105,7 +105,7 @@ const repeatTag: (tag: string, level: number) => string[] = (tag: string, level:
  * @returns {string} - Header tag HTML string.
  */
 
-const getHeaderTag: (text: string) => string = (text: string) => {
+const getHeaderTag: (text: string) => string = (text: string): string => {
     let body: string = "";
     let count: number = 2;
     text = checkEmphasis(text);
@@ -133,7 +133,7 @@ const getHeaderTag: (text: string) => string = (text: string) => {
  * @returns {any[]} - Tags in index 0, new current line in index 1.
  */
 
-const getULListTags: (lines: string[], i: number) => any[] = (lines: string[], i: number) => {
+const getULListTags: (lines: string[], i: number) => any[] = (lines: string[], i: number): any[] => {
     let body: string = `<ul>${indent}`;
 
     while (lines[++i].indexOf("- ") != -1) {
@@ -160,7 +160,7 @@ const getULListTags: (lines: string[], i: number) => any[] = (lines: string[], i
  * @returns {any[]} - Tags in index 0, new current line in index 1.
  */
 
-const getOLListTags: (lines: string[], i: number) => any[] = (lines: string[], i: number) => {
+const getOLListTags: (lines: string[], i: number) => any[] = (lines: string[], i: number): any[] => {
     let body: string = `<ol>${indent}`;
     let count = 1;
 
@@ -183,7 +183,7 @@ const getOLListTags: (lines: string[], i: number) => any[] = (lines: string[], i
  * @returns {any[]} - Tags in index 0, new current line in index 1.
  */
 
-const getCodeTags: (lines: string[], i: number) => any[] = (lines: string[], i: number) => {
+const getCodeTags: (lines: string[], i: number) => any[] = (lines: string[], i: number): any[] => {
     const language = lines[i].substring(lines[i].indexOf("```") + 3);
     let lineCount: number = 0;
     let codeBody: string = `<code data-lang="${language}">${indent}`;
@@ -208,7 +208,7 @@ const getCodeTags: (lines: string[], i: number) => any[] = (lines: string[], i: 
  * @returns {any[]} - Tags in index 0, new current line in index 1.
  */
 
-const getPlainHTML: (lines: string[], i: number) => any[] = (lines: string[], i: number) => {
+const getPlainHTML: (lines: string[], i: number) => any[] = (lines: string[], i: number): any[] => {
     let body: string = "";
     while (lines[++i].indexOf("</") !== 0 && lines[i].indexOf(">") !== lines[i].length - 1) {
         body += "   " + lines[i] + indent;
@@ -228,7 +228,7 @@ const getPlainHTML: (lines: string[], i: number) => any[] = (lines: string[], i:
  * @returns {string} - HTML content.
  */
 
-const addSpecialTag: (text: string, check: string, tag: string) => string = (text: string, check: string, tag: string) => {
+const addSpecialTag: (text: string, check: string, tag: string) => string = (text: string, check: string, tag: string): string => {
     if (text.indexOf(check) === -1) return text;
     
     const checkLength = check.length;
@@ -256,7 +256,7 @@ const addSpecialTag: (text: string, check: string, tag: string) => string = (tex
  * @returns {string} - Either text or text with special tags.
  */
 
-const checkEmphasis: (text: string) => string = (text: string) => {
+const checkEmphasis: (text: string) => string = (text: string): string => {
     text = addSpecialTag(text, "**", "strong");
     text = addSpecialTag(text, "*", "em")
     text = addSpecialTag(text, "~~", "del");
@@ -266,13 +266,13 @@ const checkEmphasis: (text: string) => string = (text: string) => {
     return text;
 }
 
-//Description
+// Description
 program
     .name("calico")
     .description("An easy to use static site generator.")
     .version("0.0.1");
 
-//start | go command
+// start | go command
 program
     .command("start")
     .alias("go")
@@ -304,7 +304,7 @@ program
         if (options.scss) makeCSS("scss");
     });
 
-//make command
+// make command
 program
     .command("make")
     .description("Create markdown file for a post.")
@@ -343,7 +343,7 @@ program
         }
     });
 
-//make-html command
+// make-html command
 program
     .command("make-html")
     .description("Calico turning all markdown files to HTML.")
@@ -374,10 +374,10 @@ program
                     body += `<blockquote>${checkEmphasis(currentLine.substring(2))}</blockquote>${indent}`;
                 } else if (currentLine.indexOf("- ") === 0) {
                     if (currentLine.indexOf("[ ]") === 2) {
-                        body += `<p>${indent}   <input type="checkbox">    ${indent}    ${checkEmphasis(currentLine.substring(6))}${indent}</p>${indent}`
+                        body += `<p>${indent}   <input type="checkbox">    ${indent}    ${checkEmphasis(currentLine.substring(6))}${indent}</p>${indent}`;
                         continue;
                     } else if (currentLine.toLowerCase().indexOf("[x]") == 2) {
-                        body += `<p>${indent}   <input type="checkbox" checked>    ${indent}    ${checkEmphasis(currentLine.substring(6))}${indent}</p>${indent}`
+                        body += `<p>${indent}   <input type="checkbox" checked>    ${indent}    ${checkEmphasis(currentLine.substring(6))}${indent}</p>${indent}`;
                         continue;
                     }
 
@@ -409,10 +409,7 @@ program
                     body += `<p>${currentLine}</p>${indent}`;
                 } else if (currentLine.indexOf("(") !== -1 && currentLine.indexOf(")") !== -1 && currentLine.indexOf("[") !== -1 && currentLine.indexOf("]") !== -1) {
                         
-                }
-                
-                
-                else {
+                } else {
                     currentLine = checkEmphasis(currentLine);
                     body += `<p>${checkEmphasis(currentLine)}</p>${indent}`;
                 }

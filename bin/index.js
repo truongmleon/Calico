@@ -222,12 +222,12 @@ var checkEmphasis = function (text) {
     text = addSpecialTag(text, "^", "sub");
     return text;
 };
-//Description
+// Description
 program
     .name("calico")
     .description("An easy to use static site generator.")
     .version("0.0.1");
-//start | go command
+// start | go command
 program
     .command("start")
     .alias("go")
@@ -258,7 +258,7 @@ program
     if (options.scss)
         makeCSS("scss");
 });
-//make command
+// make command
 program
     .command("make")
     .description("Create markdown file for a post.")
@@ -292,7 +292,7 @@ program
         console.log("".concat(filename, ".md is already created."));
     }
 });
-//make-html command
+// make-html command
 program
     .command("make-html")
     .description("Calico turning all markdown files to HTML.")
