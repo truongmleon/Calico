@@ -10,6 +10,11 @@ var projectPath = path.resolve(__dirname, "..");
 String.prototype.replaceAt = function (index, replacement, extra) {
     return this.substring(0, index) + replacement + this.substring(index + extra + 1);
 };
+/**
+ * Creates CSS files if wanted.
+ *
+ * @param {string} name - File extension to be used (either CSS or SCSS).
+ */
 var makeCSS = function (name) {
     if (!fs.existsSync("".concat(projectPath, "/assets/styles"))) {
         fs.mkdirSync("".concat(projectPath, "/assets/styles"));
@@ -29,6 +34,12 @@ var makeCSS = function (name) {
         console.log("".concat(name.toUpperCase(), " already exists."));
     }
 };
+/**
+ * Use inputted titles will have dashes and we will need to remove them with this function.
+ *
+ * @param {string} title - Makes the first letter of each word uppercase and removes '-'.
+ * @returns {string} - The formatted title.
+ */
 var formatTitle = function (title) {
     title = title.charAt(0).toUpperCase() + title.slice(1);
     var index = title.indexOf("-");
@@ -38,6 +49,12 @@ var formatTitle = function (title) {
     }
     return title;
 };
+/**
+ * Given a day of the month, append the suffix.
+ *
+ * @param {number} day - Day of the month.
+ * @returns {string} - Day with the suffix.
+ */
 var getDaySuffix = function (day) {
     var single = day % 10;
     if (single === 1)
@@ -48,6 +65,13 @@ var getDaySuffix = function (day) {
         return "3rd";
     return day + "th";
 };
+/**
+ * Repeats given tag.
+ *
+ * @param {string} tag - Tag to be repeated.
+ * @param {number} level - The number of times to repeat.
+ * @returns {string[]} - The string of repeated tags and whitespace.
+ */
 var repeatTag = function (tag, level) {
     var body = "";
     var whitespace = "";
@@ -59,6 +83,12 @@ var repeatTag = function (tag, level) {
     }
     return [body, whitespace];
 };
+/**
+ * Gets a header tag.
+ *
+ * @param {string} text - Text inside of header.
+ * @returns {string} - Header tag HTML string.
+ */
 var getheaderTag = function (text) {
     var body = "";
     var count = 2;
@@ -78,6 +108,13 @@ var getheaderTag = function (text) {
     }
     return body;
 };
+/**
+ * Gets all UL tags.
+ *
+ * @param {string[]} lines - String of lines in the markdown file.
+ * @param {number} i - Index of current line.
+ * @returns {any[]} - Tags in index 0, new current line in index 1.
+ */
 var getULListTags = function (lines, i) {
     var body = "<ul>".concat(indent);
     while (lines[++i].indexOf("- ") != -1) {
@@ -92,6 +129,13 @@ var getULListTags = function (lines, i) {
     body = checkEmphasis(body);
     return [body, i];
 };
+/**
+ * Gets all OL tags.
+ *
+ * @param {string[]} lines - String of lines in the markdown file.
+ * @param {number} i - Index of current line.
+ * @returns {any[]} - Tags in index 0, new current line in index 1.
+ */
 var getOLListTags = function (lines, i) {
     var body = "<ol>".concat(indent);
     var count = 1;
@@ -103,6 +147,13 @@ var getOLListTags = function (lines, i) {
     body = checkEmphasis(body);
     return [body, i];
 };
+/**
+ * Gets all Code tags.
+ *
+ * @param {string[]} lines - String of lines in the markdown file.
+ * @param {number} i - Index of current line.
+ * @returns {any[]} - Tags in index 0, new current line in index 1.
+ */
 var getCodeTags = function (lines, i) {
     var language = lines[i].substring(lines[i].indexOf("```") + 3);
     var lineCount = 0;
@@ -117,6 +168,13 @@ var getCodeTags = function (lines, i) {
         return ["<pre>".concat(codeBody, "</pre>").concat(indent), i];
     return [codeBody + indent, i];
 };
+/**
+ * Gets plain HTML code written in markdown.
+ *
+ * @param {string[]} lines - String of lines in the markdown file.
+ * @param {number} i - Index of current line.
+ * @returns {any[]} - Tags in index 0, new current line in index 1.
+ */
 var getPlainHTML = function (lines, i) {
     var body = "";
     while (lines[++i].indexOf("</") !== 0 && lines[i].indexOf(">") !== lines[i].length - 1) {
@@ -125,6 +183,14 @@ var getPlainHTML = function (lines, i) {
     body += lines[i] + indent;
     return [body, i];
 };
+/**
+ * Adds special tags in the middle of strings such as <strong></strong> and <em></em>.
+ *
+ * @param {string} text - Text to add possible special tags.
+ * @param {string} check - Indicator of markdown to HTML (e.g. * for italics).
+ * @param {string} tag - Tag used.
+ * @returns {string} - HTML content.
+ */
 var addSpecialTag = function (text, check, tag) {
     if (text.indexOf(check) === -1)
         return text;
@@ -143,6 +209,12 @@ var addSpecialTag = function (text, check, tag) {
     }
     return text;
 };
+/**
+ * Runs through the special tags to be added in the text.
+ *
+ * @param {string} text - Text to add possible special tags.
+ * @returns {string} - Either text or text with special tags.
+ */
 var checkEmphasis = function (text) {
     text = addSpecialTag(text, "**", "strong");
     text = addSpecialTag(text, "*", "em");
