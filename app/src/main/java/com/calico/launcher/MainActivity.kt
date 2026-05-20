@@ -73,6 +73,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -101,6 +102,7 @@ import com.calico.launcher.data.SAMPLE_TASKBAR_ITEMS
 import com.calico.launcher.emulators.EmulatorRegistry
 import com.calico.launcher.model.Game
 import com.calico.launcher.model.GameSort
+import com.calico.launcher.model.Platform
 import com.calico.launcher.model.TaskbarItem
 import com.calico.launcher.providers.CredentialStore
 import com.calico.launcher.providers.GameArtwork
@@ -351,20 +353,25 @@ private fun TopScreen(
         modifier = modifier
             .background(
                 Brush.verticalGradient(
-                    listOf(Color.White, CalicoBlueLight.copy(alpha = 0.42f)),
+                    listOf(Color.White, Color(0xFFF2F7FF), CalicoBlueLight.copy(alpha = 0.34f)),
                 ),
             )
-            .padding(18.dp),
     ) {
         Row(
-            modifier = Modifier.align(Alignment.TopStart),
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(18.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             PillIcon(Icons.Default.SportsEsports, "Discord")
             PillIcon(Icons.Default.Web, "Messages")
         }
 
-        StatusPill(modifier = Modifier.align(Alignment.TopEnd))
+        StatusPill(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 18.dp),
+        )
 
         HeroCard(
             game = selectedGame,
@@ -395,16 +402,20 @@ private fun BottomScreen(
 ) {
     Box(
         modifier = modifier
-            .background(Color.White)
-            .padding(14.dp),
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color.White, Color(0xFFF8FBFF), Color(0xFFEFF6FF)),
+                ),
+            )
+            .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(92.dp),
+            columns = GridCells.Adaptive(78.dp),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(bottom = 82.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             items(games, key = { it.id }) { game ->
                 GameTile(
@@ -449,10 +460,10 @@ private fun HeroCard(
 
     Card(
         modifier = modifier
-            .fillMaxWidth(0.52f)
+            .fillMaxWidth(0.50f)
             .aspectRatio(16f / 9f)
-            .shadow(24.dp, RoundedCornerShape(32.dp), clip = false),
-        shape = RoundedCornerShape(32.dp),
+            .shadow(28.dp, RoundedCornerShape(34.dp), clip = false),
+        shape = RoundedCornerShape(34.dp),
         colors = CardDefaults.cardColors(containerColor = CalicoInk),
     ) {
         Box(
@@ -460,7 +471,7 @@ private fun HeroCard(
                 .fillMaxSize()
                 .background(
                     Brush.radialGradient(
-                        colors = listOf(CalicoBlue.copy(alpha = 0.95f), CalicoInk),
+                        colors = listOf(CalicoBlue.copy(alpha = 0.92f), CalicoInk),
                     ),
                 )
                 .padding(24.dp),
@@ -586,11 +597,12 @@ private fun ButtonLegend(
     Surface(
         modifier = modifier,
         color = CalicoPanel,
-        shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
+        shape = RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp),
+        shadowElevation = 8.dp,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(start = 18.dp, end = 20.dp, top = 10.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             LegendAction("A", "Select", Icons.Default.PlayArrow, onLaunch)
@@ -622,6 +634,12 @@ private fun LegendAction(
 @Composable
 private fun GameTile(game: Game, artwork: GameArtwork?, selected: Boolean, onClick: () -> Unit) {
     val wiggle by animateFloatAsState(targetValue = if (selected) 0f else 0f, label = "wiggle")
+    val overlayAssetPath = game.platform.overlayAssetPath()
+    val iconFrameShape = RoundedCornerShape(18.dp)
+    val iconFrameSize = if (selected) 94.dp else 74.dp
+    val iconFrameColor = if (selected) CalicoBlueLight else Color.White
+    val iconFrameBorderColor = if (selected) Color.White.copy(alpha = 0.88f) else Color.Transparent
+    val iconFrameShadowColor = if (selected) CalicoBlue.copy(alpha = 0.85f) else Color.Black.copy(alpha = 0.18f)
 
     Column(
         modifier = Modifier
@@ -632,31 +650,63 @@ private fun GameTile(game: Game, artwork: GameArtwork?, selected: Boolean, onCli
     ) {
         Box(
             modifier = Modifier
-                .size(82.dp)
-                .shadow(if (selected) 14.dp else 2.dp, RoundedCornerShape(22.dp))
-                .background(Color.White, RoundedCornerShape(22.dp))
-                .border(
-                    width = if (selected) 3.dp else 1.dp,
-                    color = if (selected) CalicoBlue else CalicoBlueLight,
-                    shape = RoundedCornerShape(22.dp),
-                ),
+                .size(104.dp),
             contentAlignment = Alignment.Center,
         ) {
-            if (artwork?.iconUrl != null) {
-                AsyncImage(
-                    model = artwork.iconUrl,
-                    contentDescription = "${game.name} icon",
-                    contentScale = ContentScale.Fit,
+            Box(
+                modifier = Modifier
+                    .size(iconFrameSize)
+                    .shadow(
+                        elevation = if (selected) 28.dp else 3.dp,
+                        shape = if (selected) iconFrameShape else RoundedCornerShape(0.dp),
+                        clip = false,
+                        ambientColor = iconFrameShadowColor,
+                        spotColor = iconFrameShadowColor,
+                    )
+                    .background(iconFrameColor, if (selected) iconFrameShape else RoundedCornerShape(0.dp))
+                    .border(2.dp, iconFrameBorderColor, if (selected) iconFrameShape else RoundedCornerShape(0.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
                     modifier = Modifier
-                        .size(58.dp)
-                        .padding(4.dp),
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Default.SportsEsports,
-                    contentDescription = null,
-                    tint = CalicoInk,
-                    modifier = Modifier.size(34.dp),
+                        .matchParentSize()
+                        .padding(4.dp)
+                        .clip(RoundedCornerShape(0.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (artwork?.iconUrl != null) {
+                        AsyncImage(
+                            model = artwork.iconUrl,
+                            contentDescription = "${game.name} icon",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.matchParentSize(),
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(Color(0xFFFDFEFF), Color(0xFFEAF4FF)),
+                                    ),
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = game.name.initials(),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = CalicoInk,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
+                }
+
+                AsyncImage(
+                    model = overlayAssetPath,
+                    contentDescription = "${game.platform.name} border overlay",
+                    contentScale = ContentScale.FillBounds,
+                    modifier = Modifier.matchParentSize(),
                 )
             }
             if (game.isFavorite) {
@@ -671,19 +721,6 @@ private fun GameTile(game: Game, artwork: GameArtwork?, selected: Boolean, onCli
                 )
             }
         }
-        Text(
-            text = game.name,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-        )
-        Text(
-            text = game.platform.name,
-            style = MaterialTheme.typography.labelLarge,
-            color = CalicoBlue,
-            maxLines = 1,
-        )
     }
 }
 
@@ -1040,6 +1077,24 @@ private fun Int.floorMod(size: Int): Int {
     val result = this % size
     return if (result < 0) result + size else result
 }
+
+private fun Platform.overlayAssetPath(): String {
+    val folder = when (romFolderName) {
+        "3ds" -> "n3ds"
+        "ds" -> "nds"
+        "gamecube" -> "gc"
+        "ps1" -> "psx"
+        else -> romFolderName
+    }
+    return "file:///android_asset/icon_overlays/$folder/overlay.png"
+}
+
+private fun String.initials(): String =
+    split(" ", "-", "_")
+        .filter { it.isNotBlank() }
+        .take(2)
+        .joinToString("") { it.first().uppercase() }
+        .ifBlank { "?" }
 
 @Preview(showBackground = true, widthDp = 960, heightDp = 720)
 @Composable
