@@ -6,15 +6,21 @@ import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -26,10 +32,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.BatteryFull
@@ -46,12 +54,10 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Web
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
@@ -85,12 +91,18 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -121,6 +133,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import kotlin.math.min
 
 class MainActivity : ComponentActivity() {
     private val emulatorRegistry = EmulatorRegistry()
@@ -128,6 +141,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        hideAndroidStatusBar()
         CalicoDatabase(this).writableDatabase.close()
 
         lifecycleScope.launch {
@@ -154,6 +168,14 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    private fun hideAndroidStatusBar() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.statusBars())
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+    }
 }
 
 @Composable
@@ -169,33 +191,48 @@ fun CalicoLauncherApp(
     var showMenu by remember { mutableStateOf(false) }
     var showDetails by remember { mutableStateOf(false) }
     var showCredentials by remember { mutableStateOf(false) }
+    var activeMenuAction by remember { mutableStateOf<MenuActionInfo?>(null) }
     var isLoadingArtwork by remember { mutableStateOf(false) }
+    val favoriteOverrides = remember { mutableStateMapOf<Int, Boolean>() }
     val focusRequester = remember { FocusRequester() }
     val context = LocalContext.current
+    val inPreview = LocalInspectionMode.current
     val coroutineScope = rememberCoroutineScope()
-    val credentialStore = remember(context) { CredentialStore(context) }
+    val credentialStore = remember(context, inPreview) {
+        if (inPreview) null else CredentialStore(context)
+    }
     val artworkRepository = remember { GameArtworkRepository() }
-    var credentials by remember { mutableStateOf(credentialStore.load()) }
+    var credentials by remember(context, inPreview) {
+        mutableStateOf(credentialStore?.load() ?: ProviderCredentials())
+    }
     val artworkByGame = remember { mutableStateMapOf<Int, GameArtwork>() }
 
-    val sortedGames = remember(games, selectedSort) {
+    val favoriteSnapshot = favoriteOverrides.toMap()
+    val displayGames = remember(games, favoriteSnapshot) {
+        games.map { game ->
+            favoriteSnapshot[game.id]?.let { isFavorite -> game.copy(isFavorite = isFavorite) } ?: game
+        }
+    }
+    val sortedGames = remember(displayGames, selectedSort) {
         when (selectedSort) {
-            GameSort.Console -> games.sortedWith(compareBy({ it.platform.name }, { it.sortTitle }))
-            GameSort.Name -> games.sortedBy { it.sortTitle }
-            GameSort.LastPlayed -> games.sortedByDescending { it.lastPlayedAt ?: "" }
-            GameSort.TotalHours -> games.sortedByDescending { it.durationSeconds }
-            GameSort.Favorites -> games.sortedByDescending { it.isFavorite }
+            GameSort.Console -> displayGames.sortedWith(compareBy({ it.platform.name }, { it.sortTitle }))
+            GameSort.Name -> displayGames.sortedBy { it.sortTitle }
+            GameSort.LastPlayed -> displayGames.sortedByDescending { it.lastPlayedAt ?: "" }
+            GameSort.TotalHours -> displayGames.sortedByDescending { it.durationSeconds }
+            GameSort.Favorites -> displayGames.sortedByDescending { it.isFavorite }
         }
     }
     val selectedGame = sortedGames[selectedIndex.coerceIn(sortedGames.indices)]
     val selectedArtwork = artworkByGame[selectedGame.id]
 
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+    LaunchedEffect(inPreview) {
+        if (!inPreview) {
+            focusRequester.requestFocus()
+        }
     }
 
-    LaunchedEffect(selectedGame.id, credentials) {
-        if (credentials.hasSteamGridDb || credentials.hasScreenScraper || credentials.hasRetroAchievements) {
+    LaunchedEffect(selectedGame.id, credentials, inPreview) {
+        if (!inPreview && (credentials.hasSteamGridDb || credentials.hasScreenScraper || credentials.hasRetroAchievements)) {
             isLoadingArtwork = true
             artworkByGame[selectedGame.id] = artworkRepository.loadArtwork(selectedGame, credentials)
             isLoadingArtwork = false
@@ -228,7 +265,7 @@ fun CalicoLauncherApp(
                         true
                     }
                     KeyEvent.KEYCODE_BUTTON_L2 -> {
-                        showDetails = true
+                        showDetails = !showDetails
                         true
                     }
                     KeyEvent.KEYCODE_BUTTON_R2 -> {
@@ -243,6 +280,8 @@ fun CalicoLauncherApp(
                         showDetails = false
                         showMenu = false
                         showSort = false
+                        showCredentials = false
+                        activeMenuAction = null
                         true
                     }
                     else -> false
@@ -258,7 +297,7 @@ fun CalicoLauncherApp(
                 artwork = selectedArtwork,
                 isLoadingArtwork = isLoadingArtwork,
                 showDetails = showDetails,
-                onShowDetails = { showDetails = true },
+                onToggleDetails = { showDetails = !showDetails },
                 onLaunch = { emulatorRegistry.launcherFor(selectedGame)?.launch(context, selectedGame) },
                 modifier = Modifier
                     .weight(topScreenWeight)
@@ -272,13 +311,20 @@ fun CalicoLauncherApp(
                 onSelectGame = { game -> selectedIndex = sortedGames.indexOf(game) },
                 onOpenSort = { showSort = true },
                 onOpenMenu = { showMenu = true },
+                onCloseOverlay = {
+                    showDetails = false
+                    showMenu = false
+                    showSort = false
+                    showCredentials = false
+                    activeMenuAction = null
+                },
                 modifier = Modifier
                     .weight(bottomScreenWeight)
                     .fillMaxWidth(),
             )
         }
 
-        if (showSort || showMenu) {
+        if (showSort || showMenu || activeMenuAction != null) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -286,6 +332,7 @@ fun CalicoLauncherApp(
                     .clickable {
                         showSort = false
                         showMenu = false
+                        activeMenuAction = null
                     },
             )
         }
@@ -306,6 +353,13 @@ fun CalicoLauncherApp(
             selectedGame = selectedGame,
             artwork = selectedArtwork,
             isLoadingArtwork = isLoadingArtwork,
+            onToggleFavorite = {
+                favoriteOverrides[selectedGame.id] = !selectedGame.isFavorite
+            },
+            onShowMenuAction = { action ->
+                showMenu = false
+                activeMenuAction = action
+            },
             onRefreshArtwork = {
                 coroutineScope.launch {
                     isLoadingArtwork = true
@@ -320,17 +374,22 @@ fun CalicoLauncherApp(
             onDismiss = { showMenu = false },
         )
 
+        MenuActionPanel(
+            action = activeMenuAction,
+            onDismiss = { activeMenuAction = null },
+        )
+
         CredentialsPanel(
             visible = showCredentials,
             credentials = credentials,
             artworkRepository = artworkRepository,
             onSave = { nextCredentials ->
-                credentialStore.save(nextCredentials)
+                credentialStore?.save(nextCredentials)
                 credentials = nextCredentials
                 showCredentials = false
             },
             onClear = {
-                credentialStore.clear()
+                credentialStore?.clear()
                 credentials = ProviderCredentials()
                 artworkByGame.clear()
             },
@@ -339,13 +398,18 @@ fun CalicoLauncherApp(
     }
 }
 
+private data class MenuActionInfo(
+    val title: String,
+    val message: String,
+)
+
 @Composable
 private fun TopScreen(
     selectedGame: Game,
     artwork: GameArtwork?,
     isLoadingArtwork: Boolean,
     showDetails: Boolean,
-    onShowDetails: () -> Unit,
+    onToggleDetails: () -> Unit,
     onLaunch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -357,15 +421,12 @@ private fun TopScreen(
                 ),
             )
     ) {
-        Row(
+        PlaytimePill(
+            game = selectedGame,
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(18.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            PillIcon(Icons.Default.SportsEsports, "Discord")
-            PillIcon(Icons.Default.Web, "Messages")
-        }
+                .padding(top = 18.dp),
+        )
 
         StatusPill(
             modifier = Modifier
@@ -378,13 +439,15 @@ private fun TopScreen(
             artwork = artwork,
             isLoadingArtwork = isLoadingArtwork,
             showDetails = showDetails,
-            modifier = Modifier.align(Alignment.Center),
+            modifier = Modifier.fillMaxSize(),
         )
 
         ButtonLegend(
-            onShowDetails = onShowDetails,
+            onToggleDetails = onToggleDetails,
             onLaunch = onLaunch,
-            modifier = Modifier.align(Alignment.BottomEnd),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 28.dp),
         )
     }
 }
@@ -398,6 +461,7 @@ private fun BottomScreen(
     onSelectGame: (Game) -> Unit,
     onOpenSort: () -> Unit,
     onOpenMenu: () -> Unit,
+    onCloseOverlay: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -406,45 +470,50 @@ private fun BottomScreen(
                 Brush.verticalGradient(
                     listOf(Color.White, Color(0xFFF8FBFF), Color(0xFFEFF6FF)),
                 ),
-            )
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            ),
     ) {
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(78.dp),
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = 82.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 92.dp),
         ) {
-            items(games, key = { it.id }) { game ->
-                GameTile(
-                    game = game,
-                    artwork = artworkByGame[game.id],
-                    selected = game.id == selectedGame.id,
-                    onClick = { onSelectGame(game) },
-                )
+            val columns = 4
+            val visibleRows = 3
+            val horizontalGap = 8.dp
+            val verticalGap = 8.dp
+            val gridEdgePadding = 6.dp
+            val cellWidth = (maxWidth - gridEdgePadding * 2f - horizontalGap * (columns - 1)) / columns
+            val cellHeight = (maxHeight - verticalGap * (visibleRows - 1)) / visibleRows
+            val tileSize = min(cellWidth.value, cellHeight.value).dp
+            val iconFrameSize = (tileSize.value * 0.92f).dp
+
+            LazyHorizontalGrid(
+                rows = GridCells.Fixed(visibleRows),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = gridEdgePadding),
+                horizontalArrangement = Arrangement.spacedBy(horizontalGap),
+                verticalArrangement = Arrangement.spacedBy(verticalGap),
+            ) {
+                items(games, key = { it.id }) { game ->
+                    GameTile(
+                        game = game,
+                        artwork = artworkByGame[game.id],
+                        selected = game.id == selectedGame.id,
+                        tileSize = tileSize,
+                        iconFrameSize = iconFrameSize,
+                        onClick = { onSelectGame(game) },
+                    )
+                }
             }
         }
 
-        FilledIconButton(
-            onClick = onOpenSort,
-            modifier = Modifier.align(Alignment.BottomStart),
-        ) {
-            Icon(Icons.Default.Sort, contentDescription = "Sort and filter")
-        }
-
-        Taskbar(
+        BottomDock(
             items = taskbarItems,
+            onOpenSort = onOpenSort,
+            onOpenMenu = onOpenMenu,
+            onCloseOverlay = onCloseOverlay,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
-
-        FilledIconButton(
-            onClick = onOpenMenu,
-            modifier = Modifier.align(Alignment.BottomEnd),
-        ) {
-            Icon(Icons.Default.Menu, contentDescription = "Menu")
-        }
     }
 }
 
@@ -458,74 +527,131 @@ private fun HeroCard(
 ) {
     val heroModel = artwork?.heroUrl ?: artwork?.screenshotUrl
 
-    Card(
+    Box(
         modifier = modifier
-            .fillMaxWidth(0.50f)
-            .aspectRatio(16f / 9f)
-            .shadow(28.dp, RoundedCornerShape(34.dp), clip = false),
-        shape = RoundedCornerShape(34.dp),
-        colors = CardDefaults.cardColors(containerColor = CalicoInk),
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(CalicoBlue.copy(alpha = 0.72f), Color(0xFFF4F8FF)),
+                ),
+            ),
     ) {
-        Box(
+        if (heroModel != null) {
+            AsyncImage(
+                model = heroModel,
+                contentDescription = "${game.name} hero artwork",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+            )
+        }
+
+        SoftImageVignette()
+
+        Column(
             modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(CalicoBlue.copy(alpha = 0.92f), CalicoInk),
-                    ),
-                )
-                .padding(24.dp),
+                .align(Alignment.Center)
+                .fillMaxWidth(0.58f),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (heroModel != null) {
-                AsyncImage(
-                    model = heroModel,
-                    contentDescription = "${game.name} hero artwork",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .matchParentSize()
-                        .graphicsLayer(alpha = 0.82f),
-                )
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, CalicoInk.copy(alpha = 0.92f)),
-                            ),
-                        ),
-                )
-            }
+            Text(
+                text = game.platform.name,
+                color = Color.White.copy(alpha = 0.78f),
+                style = MaterialTheme.typography.labelLarge,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                text = game.name,
+                color = Color.White,
+                style = MaterialTheme.typography.displaySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+            )
+        }
 
-            Column(Modifier.align(Alignment.BottomStart)) {
-                Text(
-                    text = game.platform.name,
-                    color = Color.White.copy(alpha = 0.72f),
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Text(
-                    text = game.name,
-                    color = Color.White,
-                    style = MaterialTheme.typography.displaySmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+        if (showDetails) {
+            Box(modifier = Modifier.align(Alignment.TopEnd)) {
+                GameDetails(game)
             }
+        }
 
-            if (showDetails) {
-                Box(modifier = Modifier.align(Alignment.TopEnd)) {
-                    GameDetails(game)
-                }
-            }
+        if (isLoadingArtwork) {
+            CircularProgressIndicator(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(18.dp)
+                    .size(28.dp),
+                color = CalicoBlue,
+                strokeWidth = 3.dp,
+            )
+        }
+    }
+}
 
-            if (isLoadingArtwork) {
-                CircularProgressIndicator(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .size(28.dp),
-                    color = Color.White,
-                    strokeWidth = 3.dp,
-                )
-            }
+@Composable
+private fun BoxScope.SoftImageVignette() {
+    Box(
+        modifier = Modifier
+            .matchParentSize()
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(Color.Transparent, Color.White.copy(alpha = 0.34f)),
+                ),
+            ),
+    )
+    Box(
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .fillMaxWidth()
+            .height(72.dp)
+            .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.82f), Color.Transparent))),
+    )
+    Box(
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .fillMaxWidth()
+            .height(96.dp)
+            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.White.copy(alpha = 0.78f)))),
+    )
+    Box(
+        modifier = Modifier
+            .align(Alignment.CenterStart)
+            .fillMaxHeight()
+            .width(96.dp)
+            .background(Brush.horizontalGradient(listOf(Color.White.copy(alpha = 0.82f), Color.Transparent))),
+    )
+    Box(
+        modifier = Modifier
+            .align(Alignment.CenterEnd)
+            .fillMaxHeight()
+            .width(96.dp)
+            .background(Brush.horizontalGradient(listOf(Color.Transparent, Color.White.copy(alpha = 0.82f)))),
+    )
+}
+
+@Composable
+private fun PlaytimePill(game: Game, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        color = CalicoPanel,
+        shape = RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp),
+        shadowElevation = 8.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.AccessTime,
+                contentDescription = null,
+                tint = CalicoInk,
+                modifier = Modifier.size(17.dp),
+            )
+            Text(
+                text = "${game.hoursPlayed}h played",
+                color = CalicoInk,
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
 }
@@ -555,16 +681,23 @@ private fun GameDetails(game: Game) {
 private fun StatusPill(modifier: Modifier = Modifier) {
     var now by remember { mutableStateOf(LocalDateTime.now()) }
     val context = LocalContext.current
-    val battery = remember {
-        context.getSystemService(BatteryManager::class.java)
-            ?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-            ?.takeIf { it >= 0 } ?: 0
+    val inPreview = LocalInspectionMode.current
+    val battery = remember(context, inPreview) {
+        if (inPreview) {
+            100
+        } else {
+            context.getSystemService(BatteryManager::class.java)
+                ?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                ?.takeIf { it >= 0 } ?: 0
+        }
     }
 
-    LaunchedEffect(Unit) {
-        while (true) {
-            now = LocalDateTime.now()
-            delay(30_000)
+    LaunchedEffect(inPreview) {
+        if (!inPreview) {
+            while (true) {
+                now = LocalDateTime.now()
+                delay(30_000)
+            }
         }
     }
 
@@ -572,6 +705,7 @@ private fun StatusPill(modifier: Modifier = Modifier) {
         modifier = modifier,
         color = CalicoPanel,
         shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
+        shadowElevation = 8.dp,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
@@ -582,33 +716,78 @@ private fun StatusPill(modifier: Modifier = Modifier) {
             Text("|")
             Text(now.format(DateTimeFormatter.ofPattern("M/d")))
             Text("|")
-            Icon(Icons.Default.BatteryFull, contentDescription = null, modifier = Modifier.size(18.dp))
             Text("$battery%")
+            SegmentedBatteryIcon(percent = battery)
+        }
+    }
+}
+
+@Composable
+private fun SegmentedBatteryIcon(percent: Int) {
+    val filledBars = when {
+        percent >= 90 -> 4
+        percent >= 75 -> 3
+        percent >= 50 -> 2
+        percent >= 25 -> 1
+        else -> 0
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 2.dp, height = 6.dp)
+                .background(CalicoInk, RoundedCornerShape(topStart = 1.dp, bottomStart = 1.dp)),
+        )
+        Box(
+            modifier = Modifier
+                .size(width = 23.dp, height = 13.dp)
+                .border(1.6.dp, CalicoInk, RoundedCornerShape(2.dp))
+                .padding(2.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.spacedBy(1.5.dp),
+            ) {
+                repeat(4) { index ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .background(
+                                if (index < filledBars) CalicoInk else Color.Transparent,
+                                RoundedCornerShape(1.dp),
+                            ),
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun ButtonLegend(
-    onShowDetails: () -> Unit,
+    onToggleDetails: () -> Unit,
     onLaunch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
         modifier = modifier,
         color = CalicoPanel,
-        shape = RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp),
+        shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp),
         shadowElevation = 8.dp,
     ) {
         Row(
-            modifier = Modifier.padding(start = 18.dp, end = 20.dp, top = 10.dp, bottom = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(start = 20.dp, end = 22.dp, top = 9.dp, bottom = 9.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            LegendAction("A", "Select", Icons.Default.PlayArrow, onLaunch)
-            LegendAction("B", "Back", Icons.Default.ArrowBack) {}
-            LegendAction("-", "Details", Icons.Default.Info, onShowDetails)
-            LegendAction("+", "Menu", Icons.Default.Menu) {}
+            LegendAction("A", "Select", onLaunch)
+            LegendAction("B", "Back") {}
+            LegendAction("-", "Details", onToggleDetails)
+            LegendAction("+", "Menu") {}
         }
     }
 }
@@ -617,29 +796,71 @@ private fun ButtonLegend(
 private fun LegendAction(
     button: String,
     label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit,
 ) {
+    val legendInk = CalicoInk
     Row(
         modifier = Modifier.clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(button, fontWeight = FontWeight.Bold)
-        Icon(icon, contentDescription = label, modifier = Modifier.size(17.dp))
-        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .border(0.6.dp, legendInk, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = button,
+                color = legendInk,
+                fontSize = if (button == "-") 17.sp else 12.sp,
+                fontWeight = FontWeight.ExtraBold,
+                lineHeight = if (button == "-") 17.sp else 12.sp,
+            )
+        }
+        Text(
+            text = label,
+            color = legendInk,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.ExtraBold,
+        )
     }
 }
 
 @Composable
-private fun GameTile(game: Game, artwork: GameArtwork?, selected: Boolean, onClick: () -> Unit) {
+private fun GameTile(
+    game: Game,
+    artwork: GameArtwork?,
+    selected: Boolean,
+    tileSize: Dp,
+    iconFrameSize: Dp,
+    onClick: () -> Unit,
+) {
     val wiggle by animateFloatAsState(targetValue = if (selected) 0f else 0f, label = "wiggle")
+    val inPreview = LocalInspectionMode.current
     val overlayAssetPath = game.platform.overlayAssetPath()
-    val iconFrameShape = RoundedCornerShape(18.dp)
-    val iconFrameSize = if (selected) 94.dp else 74.dp
-    val iconFrameColor = if (selected) CalicoBlueLight else Color.White
-    val iconFrameBorderColor = if (selected) Color.White.copy(alpha = 0.88f) else Color.Transparent
-    val iconFrameShadowColor = if (selected) CalicoBlue.copy(alpha = 0.85f) else Color.Black.copy(alpha = 0.18f)
+    val selectedBorderWidth = 2.dp
+    val selectedBorderOutset = selectedBorderWidth
+    val selectedBorderSize = iconFrameSize + selectedBorderOutset * 2f
+    val selectedBorderRadius = (iconFrameSize.value * 0.075f).dp + selectedBorderOutset
+    val favoritePadding = (tileSize.value * 0.11f).dp
+    val favoriteSize = (iconFrameSize.value * 0.18f).dp
+    val selectionAnimation = tween<Float>(durationMillis = 180, easing = FastOutSlowInEasing)
+    val iconScale by animateFloatAsState(
+        targetValue = if (selected) 1.10f else 1f,
+        animationSpec = selectionAnimation,
+        label = "iconScale",
+    )
+    val selectedBorderAlpha by animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = selectionAnimation,
+        label = "selectedBorderAlpha",
+    )
+    val iconFrameShadowColor by animateColorAsState(
+        targetValue = if (selected) CalicoBlue.copy(alpha = 0.55f) else Color.Black.copy(alpha = 0.18f),
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+        label = "iconFrameShadowColor",
+    )
 
     Column(
         modifier = Modifier
@@ -650,21 +871,24 @@ private fun GameTile(game: Game, artwork: GameArtwork?, selected: Boolean, onCli
     ) {
         Box(
             modifier = Modifier
-                .size(104.dp),
+                .size(tileSize),
             contentAlignment = Alignment.Center,
         ) {
             Box(
                 modifier = Modifier
                     .size(iconFrameSize)
+                    .graphicsLayer {
+                        scaleX = iconScale
+                        scaleY = iconScale
+                    }
                     .shadow(
-                        elevation = if (selected) 28.dp else 3.dp,
-                        shape = if (selected) iconFrameShape else RoundedCornerShape(0.dp),
+                        elevation = if (selected) 18.dp else 3.dp,
+                        shape = RoundedCornerShape(0.dp),
                         clip = false,
                         ambientColor = iconFrameShadowColor,
                         spotColor = iconFrameShadowColor,
                     )
-                    .background(iconFrameColor, if (selected) iconFrameShape else RoundedCornerShape(0.dp))
-                    .border(2.dp, iconFrameBorderColor, if (selected) iconFrameShape else RoundedCornerShape(0.dp)),
+                    .background(Color.White, RoundedCornerShape(0.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
@@ -702,13 +926,31 @@ private fun GameTile(game: Game, artwork: GameArtwork?, selected: Boolean, onCli
                     }
                 }
 
-                AsyncImage(
-                    model = overlayAssetPath,
-                    contentDescription = "${game.platform.name} border overlay",
-                    contentScale = ContentScale.FillBounds,
-                    modifier = Modifier.matchParentSize(),
-                )
+                if (inPreview) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .border(3.dp, CalicoBlue.copy(alpha = 0.45f), RoundedCornerShape(selectedBorderRadius)),
+                    )
+                } else {
+                    AsyncImage(
+                        model = overlayAssetPath,
+                        contentDescription = "${game.platform.name} border overlay",
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier.matchParentSize(),
+                    )
+                }
             }
+            Box(
+                modifier = Modifier
+                    .size(selectedBorderSize)
+                    .graphicsLayer {
+                        scaleX = iconScale
+                        scaleY = iconScale
+                        alpha = selectedBorderAlpha
+                    }
+                    .border(selectedBorderWidth, CalicoBlue, RoundedCornerShape(selectedBorderRadius)),
+            )
             if (game.isFavorite) {
                 Icon(
                     imageVector = Icons.Default.Star,
@@ -716,9 +958,92 @@ private fun GameTile(game: Game, artwork: GameArtwork?, selected: Boolean, onCli
                     tint = CalicoBlue,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                        .size(16.dp),
+                        .padding(favoritePadding)
+                        .size(favoriteSize),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BottomDock(
+    items: List<TaskbarItem>,
+    onOpenSort: () -> Unit,
+    onOpenMenu: () -> Unit,
+    onCloseOverlay: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(58.dp),
+    ) {
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .height(46.dp),
+            color = CalicoPanel,
+            shape = RoundedCornerShape(topEnd = 14.dp),
+            shadowElevation = 8.dp,
+        ) {
+            Row(
+                modifier = Modifier.padding(start = 18.dp, end = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                IconButton(onClick = onOpenSort, modifier = Modifier.size(34.dp)) {
+                    Icon(Icons.Default.SwapVert, contentDescription = "Sort and filter", tint = CalicoInk)
+                }
+                IconButton(onClick = onCloseOverlay, modifier = Modifier.size(34.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .background(CalicoInk, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color.White,
+                            modifier = Modifier.size(15.dp),
+                        )
+                    }
+                }
+            }
+        }
+
+        Taskbar(
+            items = items,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
+
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .height(46.dp),
+            color = CalicoPanel,
+            shape = RoundedCornerShape(topStart = 14.dp),
+            shadowElevation = 8.dp,
+        ) {
+            Row(
+                modifier = Modifier.padding(start = 12.dp, end = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                IconButton(onClick = onOpenMenu, modifier = Modifier.size(34.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .background(CalicoInk, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("Y", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
+                    }
+                }
+                IconButton(onClick = onOpenMenu, modifier = Modifier.size(34.dp)) {
+                    Icon(Icons.Default.Menu, contentDescription = "Menu", tint = CalicoInk)
+                }
             }
         }
     }
@@ -728,17 +1053,22 @@ private fun GameTile(game: Game, artwork: GameArtwork?, selected: Boolean, onCli
 private fun Taskbar(items: List<TaskbarItem>, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
-        color = CalicoPanel,
-        shape = RoundedCornerShape(28.dp),
-        shadowElevation = 10.dp,
+        color = Color.Transparent,
+        shape = RoundedCornerShape(0.dp),
+        shadowElevation = 0.dp,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             items.filter { it.isEnabled }.forEach { item ->
-                IconButton(onClick = {}) {
+                IconButton(
+                    onClick = {},
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(CalicoPanel, CircleShape),
+                ) {
                     Icon(
                         imageVector = when (item.itemType) {
                             "system_action" -> Icons.Default.Star
@@ -746,6 +1076,7 @@ private fun Taskbar(items: List<TaskbarItem>, modifier: Modifier = Modifier) {
                             else -> Icons.Default.Apps
                         },
                         contentDescription = item.name,
+                        tint = CalicoInk,
                     )
                 }
             }
@@ -781,6 +1112,8 @@ private fun MenuPanel(
     selectedGame: Game,
     artwork: GameArtwork?,
     isLoadingArtwork: Boolean,
+    onToggleFavorite: () -> Unit,
+    onShowMenuAction: (MenuActionInfo) -> Unit,
     onRefreshArtwork: () -> Unit,
     onOpenCredentials: () -> Unit,
     onDismiss: () -> Unit,
@@ -790,22 +1123,115 @@ private fun MenuPanel(
             Text("Now Playing", style = MaterialTheme.typography.titleLarge)
             Text("No background music selected", color = CalicoInk.copy(alpha = 0.72f))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                IconButton(onClick = {}) { Icon(Icons.Default.FastRewind, contentDescription = "Back") }
-                IconButton(onClick = {}) { Icon(Icons.Default.PlayArrow, contentDescription = "Play") }
-                IconButton(onClick = {}) { Icon(Icons.Default.FastForward, contentDescription = "Forward") }
-                IconButton(onClick = {}) { Icon(Icons.Default.Loop, contentDescription = "Loop") }
-                IconButton(onClick = {}) { Icon(Icons.Default.SkipNext, contentDescription = "Skip") }
-                IconButton(onClick = {}) { Icon(Icons.Default.Favorite, contentDescription = "Favorite") }
+                IconButton(onClick = {
+                    onShowMenuAction(MenuActionInfo("Music", "Previous track support will use media/music once playback is wired."))
+                }) { Icon(Icons.Default.FastRewind, contentDescription = "Back") }
+                IconButton(onClick = {
+                    onShowMenuAction(MenuActionInfo("Music", "Music playback will start here once the media/music library is connected."))
+                }) { Icon(Icons.Default.PlayArrow, contentDescription = "Play") }
+                IconButton(onClick = {
+                    onShowMenuAction(MenuActionInfo("Music", "Next track support will use media/music once playback is wired."))
+                }) { Icon(Icons.Default.FastForward, contentDescription = "Forward") }
+                IconButton(onClick = {
+                    onShowMenuAction(MenuActionInfo("Music", "Loop mode will apply to the active song or album once playback is wired."))
+                }) { Icon(Icons.Default.Loop, contentDescription = "Loop") }
+                IconButton(onClick = {
+                    onShowMenuAction(MenuActionInfo("Music", "Skip support will use media/music once playback is wired."))
+                }) { Icon(Icons.Default.SkipNext, contentDescription = "Skip") }
+                IconButton(onClick = {
+                    onShowMenuAction(MenuActionInfo("Music", "Music favorites will be saved once playback is wired."))
+                }) { Icon(Icons.Default.Favorite, contentDescription = "Favorite") }
             }
             Divider(Modifier.padding(vertical = 16.dp))
-            MenuItem(Icons.Default.Favorite, "Add ${selectedGame.name} to favorites")
-            MenuItem(Icons.Default.Settings, "Change emulator")
-            MenuItem(Icons.Default.Folder, "Choose Emulation folder")
-            MenuItem(Icons.Default.SportsEsports, "Controller / input mapping")
-            MenuItem(Icons.Default.Web, "Bookmarks")
-            MenuItem(Icons.Default.MusicNote, "Song albums")
-            MenuItem(Icons.Default.Apps, "Modify taskbar")
-            MenuItem(Icons.Default.Info, "Manual metadata and art")
+            MenuItem(
+                Icons.Default.Favorite,
+                if (selectedGame.isFavorite) "Remove ${selectedGame.name} from favorites" else "Add ${selectedGame.name} to favorites",
+                onClick = onToggleFavorite,
+            )
+            MenuItem(
+                Icons.Default.Settings,
+                "Change emulator",
+                onClick = {
+                    onShowMenuAction(
+                        MenuActionInfo(
+                            title = "Change Emulator",
+                            message = "${selectedGame.platform.name} currently launches with its default emulator. Per-game emulator selection will save to game_emulator_preferences.",
+                        ),
+                    )
+                },
+            )
+            MenuItem(
+                Icons.Default.Folder,
+                "Choose Emulation folder",
+                onClick = {
+                    onShowMenuAction(
+                        MenuActionInfo(
+                            title = "Choose Emulation Folder",
+                            message = "Calico expects an Emulation root with roms, media, and metadata.db. Android folder picking still needs to be connected.",
+                        ),
+                    )
+                },
+            )
+            MenuItem(
+                Icons.Default.SportsEsports,
+                "Controller / input mapping",
+                onClick = {
+                    onShowMenuAction(
+                        MenuActionInfo(
+                            title = "Controller Mapping",
+                            message = "Controller mappings will be stored in input_bindings and applied to launcher actions.",
+                        ),
+                    )
+                },
+            )
+            MenuItem(
+                Icons.Default.Web,
+                "Bookmarks",
+                onClick = {
+                    onShowMenuAction(
+                        MenuActionInfo(
+                            title = "Bookmarks",
+                            message = "Bookmarks will be managed from the web_bookmarks table and can appear in the taskbar.",
+                        ),
+                    )
+                },
+            )
+            MenuItem(
+                Icons.Default.MusicNote,
+                "Song albums",
+                onClick = {
+                    onShowMenuAction(
+                        MenuActionInfo(
+                            title = "Song Albums",
+                            message = "Songs should live under media/music. Albums will map to music_albums and music_album_tracks.",
+                        ),
+                    )
+                },
+            )
+            MenuItem(
+                Icons.Default.Apps,
+                "Modify taskbar",
+                onClick = {
+                    onShowMenuAction(
+                        MenuActionInfo(
+                            title = "Modify Taskbar",
+                            message = "Taskbar customization will update taskbar_items for apps, bookmarks, and launcher actions.",
+                        ),
+                    )
+                },
+            )
+            MenuItem(
+                Icons.Default.Info,
+                "Manual metadata and art",
+                onClick = {
+                    onShowMenuAction(
+                        MenuActionInfo(
+                            title = "Manual Metadata and Art",
+                            message = "Manual edits will override provider metadata and selected artwork for ${selectedGame.name}.",
+                        ),
+                    )
+                },
+            )
             MenuItem(Icons.Default.Search, "Provider credentials", onOpenCredentials)
             MenuItem(
                 icon = Icons.Default.Web,
@@ -817,6 +1243,24 @@ private fun MenuPanel(
                 Text("Asset sources", style = MaterialTheme.typography.titleMedium)
                 Text(summary, style = MaterialTheme.typography.bodyMedium, color = CalicoInk.copy(alpha = 0.72f))
             }
+        }
+    }
+}
+
+@Composable
+private fun MenuActionPanel(
+    action: MenuActionInfo?,
+    onDismiss: () -> Unit,
+) {
+    AnimatedVisibility(visible = action != null) {
+        SidePanel(alignment = Alignment.CenterEnd, onDismiss = onDismiss) {
+            Text(action?.title.orEmpty(), style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(14.dp))
+            Text(
+                text = action?.message.orEmpty(),
+                style = MaterialTheme.typography.bodyLarge,
+                color = CalicoInk.copy(alpha = 0.78f),
+            )
         }
     }
 }
@@ -1067,8 +1511,8 @@ private val GameSort.label: String
     get() = when (this) {
         GameSort.Console -> "Console"
         GameSort.Name -> "Name"
-        GameSort.LastPlayed -> "Last played"
-        GameSort.TotalHours -> "Total hours"
+        GameSort.LastPlayed -> "Last Played"
+        GameSort.TotalHours -> "Total Hours"
         GameSort.Favorites -> "Favorites"
     }
 

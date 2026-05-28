@@ -10,6 +10,21 @@ enum class GameSort {
     Favorites,
 }
 
+enum class GameFileType(val storageName: String, val isLaunchable: Boolean) {
+    Base("base", true),
+    Update("update", false),
+    Dlc("dlc", false),
+    Disc("disc", true),
+    Patch("patch", false),
+    Save("save", false),
+    Manual("manual", false);
+
+    companion object {
+        fun fromStorageName(value: String): GameFileType =
+            entries.firstOrNull { it.storageName == value.lowercase() } ?: Base
+    }
+}
+
 data class Platform(
     val id: Int,
     val name: String,
@@ -39,6 +54,7 @@ data class Game(
     val lastPlayedAt: String?,
     val isFavorite: Boolean,
     val primaryFile: GameFile,
+    val files: List<GameFile> = listOf(primaryFile),
     val heroUri: Uri? = null,
     val iconUri: Uri? = null,
 ) {
@@ -49,15 +65,20 @@ data class GameFile(
     val id: Int,
     val gameId: Int,
     val platformId: Int,
-    val fileType: String,
+    val fileType: GameFileType,
     val path: String,
     val name: String,
     val extension: String,
     val contentUri: Uri? = null,
+    val region: String? = null,
+    val version: String? = null,
+    val discNumber: Int? = null,
+    val discTotal: Int? = null,
     val crc32: String? = null,
     val md5: String? = null,
     val sha1: String? = null,
     val isPrimary: Boolean = true,
+    val isMissing: Boolean = false,
 )
 
 data class TaskbarItem(

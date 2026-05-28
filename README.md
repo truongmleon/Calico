@@ -33,7 +33,75 @@ This repository now contains a Kotlin Android app scaffold for the launcher:
 - Menu drawer for music controls, wallpapers, taskbar, folder selection, metadata, and API login entry points
 - SQLite `metadata.db` schema matching the product document tables
 - Scan-root validation for `/roms`, `/media`, and `metadata.db`
+- ROM library scanning that groups base games, updates, DLC, patches, saves, manuals, and multi-disc files under one game entry
 - Hardcoded emulator launcher classes for RetroArch, Dolphin, Cemu, melonDS, Azahar, Eden, NethersX2, aPS3e, PPSSPP, EmuCoreV, and Flycast
 - SteamGridDB hero selection helper that chooses the first high-resolution 16:9 image from API results
 
 Open the project in Android Studio and run the `app` module on a phone, tablet, foldable, or dual-screen Android emulator.
+
+## Emulation Folder Structure
+
+Calico expects the selected Emulation root to contain `roms`, `media`, and `metadata.db`:
+
+```text
+/Emulation/
+  roms/
+  media/
+  metadata.db
+```
+
+Each platform uses its configured ROM folder name, such as `switch`, `wiiu`, `ps1`, or `gamecube`. A platform folder can contain loose ROM files for simple libraries:
+
+```text
+/Emulation/
+  roms/
+    snes/
+      Chrono Trigger.sfc
+      Super Metroid.sfc
+```
+
+For games with updates, DLC, multi-disc media, or extracted content, use one folder per game. Calico treats the folder as one game entry and classifies child files by folder name:
+
+```text
+/Emulation/
+  roms/
+    switch/
+      Mario Kart 8 Deluxe/
+        base/
+          Mario Kart 8 Deluxe.xci
+        updates/
+          v3.0.3.nsp
+        dlc/
+          Booster Course Pass.nsp
+
+    ps1/
+      Metal Gear Solid/
+        discs/
+          Disc 1.chd
+          Disc 2.chd
+```
+
+Extracted Wii U/Cemu-style folders are supported when a scanned folder contains `code`, `content`, and `meta`:
+
+```text
+/Emulation/
+  roms/
+    wiiu/
+      Mario Kart 8/
+        base/
+          code/
+          content/
+          meta/
+        updates/
+          v81/
+            code/
+            content/
+            meta/
+        dlc/
+          Pack 1/
+            code/
+            content/
+            meta/
+```
+
+Recognized child folders are `base`, `game`, `updates`, `update`, `dlc`, `addons`, `add-ons`, `discs`, `disc`, `patches`, `patch`, `saves`, `save`, `manuals`, and `manual`. `base` and `disc` files are launchable; updates and DLC are tracked as attached game files for install/import flows rather than shown as separate games in the main grid.

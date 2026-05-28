@@ -3,6 +3,7 @@ package com.calico.launcher.data
 import com.calico.launcher.model.Emulator
 import com.calico.launcher.model.Game
 import com.calico.launcher.model.GameFile
+import com.calico.launcher.model.GameFileType
 import com.calico.launcher.model.Platform
 import com.calico.launcher.model.TaskbarItem
 
@@ -98,7 +99,7 @@ private fun sampleGame(
         id = id,
         gameId = id,
         platformId = platform.id,
-        fileType = "base",
+        fileType = GameFileType.Base,
         path = "/Emulation/roms/${platform.romFolderName}/$name.${platform.supportedExtensions.first()}",
         name = "$name.${platform.supportedExtensions.first()}",
         extension = platform.supportedExtensions.first(),
