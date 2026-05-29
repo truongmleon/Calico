@@ -28,6 +28,7 @@ data class ProviderConnectionStatus(
 data class GameArtwork(
     val heroUrl: String? = null,
     val iconUrl: String? = null,
+    val logoUrl: String? = null,
     val screenshotUrl: String? = null,
     val retroAchievementsId: Int? = null,
     val sourceSummary: String = "Sample placeholder",

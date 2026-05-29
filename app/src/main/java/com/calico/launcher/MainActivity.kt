@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
@@ -795,7 +796,7 @@ private fun TopScreen(
         modifier = modifier
             .background(
                 Brush.verticalGradient(
-                    listOf(Color.White, Color(0xFFF2F7FF), CalicoBlueLight.copy(alpha = 0.34f)),
+                    listOf(Color.White.copy(alpha = 0.18f), Color.Transparent, CalicoBlueLight.copy(alpha = 0.10f)),
                 ),
             )
     ) {
@@ -847,7 +848,7 @@ private fun BottomScreen(
         modifier = modifier
             .background(
                 Brush.verticalGradient(
-                    listOf(Color.White, Color(0xFFF8FBFF), Color(0xFFEFF6FF)),
+                    listOf(Color.White.copy(alpha = 0.22f), Color(0xFFF8FBFF), Color(0xFFEFF6FF)),
                 ),
             ),
     ) {
@@ -937,14 +938,26 @@ private fun HeroCard(
                 style = MaterialTheme.typography.labelLarge,
                 textAlign = TextAlign.Center,
             )
-            Text(
-                text = game.name,
-                color = Color.White,
-                style = MaterialTheme.typography.displaySmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-            )
+            val logoModel = rememberArtworkImageModel(artwork?.logoUrl)
+            if (logoModel != null) {
+                AsyncImage(
+                    model = logoModel,
+                    contentDescription = "${game.name} logo",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 96.dp),
+                )
+            } else {
+                Text(
+                    text = game.name,
+                    color = Color.White,
+                    style = MaterialTheme.typography.displaySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                )
+            }
         }
 
         if (showDetails) {
@@ -968,42 +981,32 @@ private fun HeroCard(
 
 @Composable
 private fun BoxScope.SoftImageVignette() {
+    // Subtle radial darkening toward edges for depth — no boxy white panels
     Box(
         modifier = Modifier
             .matchParentSize()
             .background(
                 Brush.radialGradient(
-                    colors = listOf(Color.Transparent, Color.White.copy(alpha = 0.34f)),
+                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.18f)),
+                    radius = Float.MAX_VALUE,
                 ),
             ),
     )
+    // Soft top fade
     Box(
         modifier = Modifier
             .align(Alignment.TopCenter)
             .fillMaxWidth()
-            .height(72.dp)
-            .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.82f), Color.Transparent))),
+            .height(56.dp)
+            .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.28f), Color.Transparent))),
     )
+    // Soft bottom fade
     Box(
         modifier = Modifier
             .align(Alignment.BottomCenter)
             .fillMaxWidth()
-            .height(96.dp)
-            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.White.copy(alpha = 0.78f)))),
-    )
-    Box(
-        modifier = Modifier
-            .align(Alignment.CenterStart)
-            .fillMaxHeight()
-            .width(96.dp)
-            .background(Brush.horizontalGradient(listOf(Color.White.copy(alpha = 0.82f), Color.Transparent))),
-    )
-    Box(
-        modifier = Modifier
-            .align(Alignment.CenterEnd)
-            .fillMaxHeight()
-            .width(96.dp)
-            .background(Brush.horizontalGradient(listOf(Color.Transparent, Color.White.copy(alpha = 0.82f)))),
+            .height(72.dp)
+            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.White.copy(alpha = 0.22f)))),
     )
 }
 
@@ -1354,19 +1357,19 @@ private fun GameTile(
                     }
                     .shadow(
                         elevation = if (selected) 18.dp else 3.dp,
-                        shape = RoundedCornerShape(0.dp),
+                        shape = RoundedCornerShape(14.dp),
                         clip = false,
                         ambientColor = iconFrameShadowColor,
                         spotColor = iconFrameShadowColor,
                     )
-                    .background(Color.White, RoundedCornerShape(0.dp)),
+                    .background(Color.White, RoundedCornerShape(14.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
                     modifier = Modifier
                         .matchParentSize()
-                        .padding(4.dp)
-                        .clip(RoundedCornerShape(0.dp)),
+                        .padding(2.dp)
+                        .clip(RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (tileArtworkModel != null) {
@@ -1472,19 +1475,12 @@ private fun BottomDock(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 IconButton(onClick = onOpenSort, modifier = Modifier.size(34.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .size(22.dp)
-                            .background(CalicoInk, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.Default.SwapVert,
-                            contentDescription = "Sort and filter",
-                            tint = Color.White,
-                            modifier = Modifier.size(15.dp),
-                        )
-                    }
+                    Icon(
+                        Icons.Default.SwapVert,
+                        contentDescription = "Sort and filter",
+                        tint = CalicoInk,
+                        modifier = Modifier.size(22.dp),
+                    )
                 }
                 IconButton(onClick = onCloseOverlay, modifier = Modifier.size(34.dp)) {
                     Box(

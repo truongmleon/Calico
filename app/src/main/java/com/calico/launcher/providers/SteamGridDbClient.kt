@@ -20,16 +20,19 @@ class SteamGridDbClient(
         Log.d(TAG, "findArtwork: found gameId=$gameId for '${game.name}'")
         val hero = runCatching { findHeroUrl(gameId, apiKey) }.getOrNull()
         Log.d(TAG, "findArtwork: heroUrl=$hero for gameId=$gameId")
-        // Prefer square grid art (512x512, 1024x1024) — these are proper NxN game art
+        // Prefer square grid art (512x512, 1024x1024) — proper NxN game art
         // Fall back to portrait grid, then small OS icons as last resort
         val tile = runCatching { findSquareGridUrl(gameId, apiKey) }.getOrNull()
             ?: runCatching { findPosterGridUrl(gameId, apiKey) }.getOrNull()
             ?: runCatching { findIconUrl(gameId, apiKey) }.getOrNull()
         Log.d(TAG, "findArtwork: iconUrl=$tile for gameId=$gameId ('${game.name}')")
+        val logo = runCatching { findLogoUrl(gameId, apiKey) }.getOrNull()
+        Log.d(TAG, "findArtwork: logoUrl=$logo for gameId=$gameId ('${game.name}')")
 
         return GameArtwork(
             heroUrl = hero,
             iconUrl = tile,
+            logoUrl = logo,
             sourceSummary = "SteamGridDB game $gameId",
         )
     }
@@ -89,6 +92,18 @@ class SteamGridDbClient(
         return items.firstNotNullOfOrNull { it.optionalImageUrl(skipIco = true) }
     }
 
+    private suspend fun findLogoUrl(gameId: Int, apiKey: String): String? {
+        val response = http.getJsonObject(
+            "$BASE_URL/logos/game/$gameId?styles=official,white,black,custom&types=static",
+            authHeaders(apiKey),
+        )
+        val items = response.childrenObjects("data")
+        Log.d(TAG, "findLogoUrl: gameId=$gameId returned ${items.size} logo candidates")
+        // Prefer logos with transparent background (has_transparent_background = true)
+        return items
+            .sortedByDescending { it.optBoolean("has_transparent_background", false) }
+            .firstNotNullOfOrNull { it.optionalImageUrl(skipIco = false) }
+    }
 
     private suspend fun findSquareGridUrl(gameId: Int, apiKey: String): String? =
         findGridUrl(gameId, apiKey, "512x512,1024x1024")

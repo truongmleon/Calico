@@ -15,8 +15,9 @@ class ArtworkCache(context: Context) {
     fun load(gameId: Int): CachedArtwork? {
         val iconUrl = prefs.getString(iconKey(gameId), null)
         val heroUrl = prefs.getString(heroKey(gameId), null)
-        return if (iconUrl != null || heroUrl != null) {
-            CachedArtwork(iconUrl = iconUrl, heroUrl = heroUrl)
+        val logoUrl = prefs.getString(logoKey(gameId), null)
+        return if (iconUrl != null || heroUrl != null || logoUrl != null) {
+            CachedArtwork(iconUrl = iconUrl, heroUrl = heroUrl, logoUrl = logoUrl)
         } else {
             null
         }
@@ -30,8 +31,11 @@ class ArtworkCache(context: Context) {
         if (artwork.heroUrl != null) {
             editor.putString(heroKey(gameId), artwork.heroUrl)
         }
+        if (artwork.logoUrl != null) {
+            editor.putString(logoKey(gameId), artwork.logoUrl)
+        }
         editor.apply()
-        Log.d(TAG, "Cached artwork for gameId=$gameId icon=${artwork.iconUrl} hero=${artwork.heroUrl}")
+        Log.d(TAG, "Cached artwork for gameId=$gameId icon=${artwork.iconUrl} hero=${artwork.heroUrl} logo=${artwork.logoUrl}")
     }
 
     fun clear() {
@@ -41,6 +45,7 @@ class ArtworkCache(context: Context) {
 
     private fun iconKey(gameId: Int) = "icon_$gameId"
     private fun heroKey(gameId: Int) = "hero_$gameId"
+    private fun logoKey(gameId: Int) = "logo_$gameId"
 
     private companion object {
         const val TAG = "ArtworkCache"
@@ -51,4 +56,5 @@ class ArtworkCache(context: Context) {
 data class CachedArtwork(
     val iconUrl: String?,
     val heroUrl: String?,
+    val logoUrl: String?,
 )

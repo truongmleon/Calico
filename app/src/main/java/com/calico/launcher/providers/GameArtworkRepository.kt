@@ -22,6 +22,7 @@ class GameArtworkRepository(
             return GameArtwork(
                 iconUrl = cached.iconUrl,
                 heroUrl = cached.heroUrl,
+                logoUrl = cached.logoUrl,
                 sourceSummary = "Cache",
             )
         }
@@ -44,7 +45,7 @@ class GameArtworkRepository(
         }
 
         // Persist to disk cache if we got useful artwork URLs
-        if (result.iconUrl != null || result.heroUrl != null) {
+        if (result.iconUrl != null || result.heroUrl != null || result.logoUrl != null) {
             artworkCache?.save(game.id, result)
         }
 
@@ -96,6 +97,7 @@ class GameArtworkRepository(
         return GameArtwork(
             heroUrl = results.firstNotNullOfOrNull { it.heroUrl },
             iconUrl = results.firstNotNullOfOrNull { it.iconUrl },
+            logoUrl = results.firstNotNullOfOrNull { it.logoUrl },
             screenshotUrl = results.firstNotNullOfOrNull { it.screenshotUrl },
             retroAchievementsId = results.firstNotNullOfOrNull { it.retroAchievementsId },
             sourceSummary = results.joinToString(" | ") { it.sourceSummary },
