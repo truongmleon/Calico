@@ -1,6 +1,7 @@
 package com.calico.launcher.ui.theme
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 
@@ -19,6 +20,7 @@ fun CalicoTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = LightColors,
         typography = CalicoTypography,
-        content = content,
-    )
+    ) {
+        ProvideTextStyle(CalicoTypography.bodyMedium, content)
+    }
 }

@@ -5,19 +5,31 @@ import com.calico.launcher.model.Game
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 
 class GameArtworkRepository(
     private val steamGridDbClient: SteamGridDbClient = SteamGridDbClient(),
     private val screenScraperClient: ScreenScraperClient = ScreenScraperClient(),
     private val retroAchievementsClient: RetroAchievementsClient = RetroAchievementsClient(),
+    private val artworkCache: ArtworkCache? = null,
 ) {
-    suspend fun loadArtwork(game: Game, credentials: ProviderCredentials): GameArtwork =
-        coroutineScope {
+    suspend fun loadArtwork(game: Game, credentials: ProviderCredentials): GameArtwork {
+        // Check disk cache first — skip API calls if we have cached URLs
+        val cached = artworkCache?.load(game.id)
+        if (cached != null) {
+            Log.d(TAG, "Cache hit for '${game.name}' (id=${game.id}): icon=${cached.iconUrl}")
+            return GameArtwork(
+                iconUrl = cached.iconUrl,
+                heroUrl = cached.heroUrl,
+                sourceSummary = "Cache",
+            )
+        }
+
+        val result = supervisorScope {
             val requests = buildList {
                 if (credentials.hasSteamGridDb) {
-                    add(async { runProvider("SteamGridDB") { steamGridDbClient.findArtwork(game.name, credentials.steamGridDbApiKey) } })
+                    add(async { runProvider("SteamGridDB") { steamGridDbClient.findArtwork(game, credentials.steamGridDbApiKey) } })
                 }
                 if (credentials.hasScreenScraper) {
                     add(async { runProvider("ScreenScraper") { screenScraperClient.findArtwork(game, credentials) } })
@@ -30,6 +42,14 @@ class GameArtworkRepository(
             val results = requests.awaitAll().filterNotNull()
             merge(results)
         }
+
+        // Persist to disk cache if we got useful artwork URLs
+        if (result.iconUrl != null || result.heroUrl != null) {
+            artworkCache?.save(game.id, result)
+        }
+
+        return result
+    }
 
     suspend fun testConnections(credentials: ProviderCredentials): ProviderConnectionStatus =
         withContext(Dispatchers.IO) {
@@ -44,7 +64,7 @@ class GameArtworkRepository(
         try {
             retroAchievementsClient.findAchievements(game, credentials)
         } catch (error: Exception) {
-            Log.w("GameArtworkRepository", "RetroAchievements achievements request failed", error)
+            Log.w(TAG, "RetroAchievements achievements request failed", error)
             RetroAchievementsSummary(
                 gameId = null,
                 gameTitle = game.name,
@@ -58,7 +78,7 @@ class GameArtworkRepository(
         try {
             block()
         } catch (error: Exception) {
-            Log.w("GameArtworkRepository", "$name test failed", error)
+            Log.w(TAG, "$name test failed", error)
             error.message?.takeIf { it.isNotBlank() }?.let { "Failed: $it" } ?: "Failed"
         }
 
@@ -66,7 +86,7 @@ class GameArtworkRepository(
         try {
             block()
         } catch (error: Exception) {
-            Log.w("GameArtworkRepository", "$name request failed", error)
+            Log.w(TAG, "$name request failed", error)
             null
         }
 
@@ -81,4 +101,9 @@ class GameArtworkRepository(
             sourceSummary = results.joinToString(" | ") { it.sourceSummary },
         )
     }
+
+    private companion object {
+        const val TAG = "GameArtworkRepository"
+    }
 }
+

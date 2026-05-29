@@ -34,10 +34,15 @@ class HttpJsonClient {
         connection.requestMethod = "GET"
         connection.connectTimeout = 12_000
         connection.readTimeout = 20_000
+        connection.setRequestProperty("Accept", "application/json")
+        connection.setRequestProperty("User-Agent", "CalicoLauncher/0.1")
         headers.forEach { (key, value) -> connection.setRequestProperty(key, value) }
+
+        android.util.Log.d("HttpJsonClient", "Response code: ${connection.responseCode} for $url")
 
         if (connection.responseCode !in 200..299) {
             val error = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            android.util.Log.e("HttpJsonClient", "HTTP ${connection.responseCode}: $error for $url")
             throw IllegalStateException("HTTP ${connection.responseCode}: $error")
         }
         return connection
@@ -50,3 +55,5 @@ class HttpJsonClient {
 }
 
 fun String.urlEncoded(): String = URLEncoder.encode(this, Charsets.UTF_8.name())
+
+fun String.urlPathEncoded(): String = urlEncoded().replace("+", "%20")
