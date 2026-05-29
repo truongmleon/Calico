@@ -34,13 +34,32 @@ class GameArtworkRepository(
     suspend fun testConnections(credentials: ProviderCredentials): ProviderConnectionStatus =
         withContext(Dispatchers.IO) {
             ProviderConnectionStatus(
-                steamGridDb = runProvider("SteamGridDB") { steamGridDbClient.test(credentials.steamGridDbApiKey) }
-                    ?: "Failed",
-                screenScraper = runProvider("ScreenScraper") { screenScraperClient.test(credentials) }
-                    ?: "Failed",
-                retroAchievements = runProvider("RetroAchievements") { retroAchievementsClient.test(credentials) }
-                    ?: "Failed",
+                steamGridDb = runConnectionTest("SteamGridDB") { steamGridDbClient.test(credentials.steamGridDbApiKey) },
+                screenScraper = runConnectionTest("ScreenScraper") { screenScraperClient.test(credentials) },
+                retroAchievements = runConnectionTest("RetroAchievements") { retroAchievementsClient.test(credentials) },
             )
+        }
+
+    suspend fun loadRetroAchievements(game: Game, credentials: ProviderCredentials): RetroAchievementsSummary =
+        try {
+            retroAchievementsClient.findAchievements(game, credentials)
+        } catch (error: Exception) {
+            Log.w("GameArtworkRepository", "RetroAchievements achievements request failed", error)
+            RetroAchievementsSummary(
+                gameId = null,
+                gameTitle = game.name,
+                message = error.message?.takeIf { it.isNotBlank() }?.let { "Failed: $it" } ?: "Failed",
+                sourceGameId = game.id,
+                platformName = game.platform.name,
+            )
+        }
+
+    private suspend fun runConnectionTest(name: String, block: suspend () -> String): String =
+        try {
+            block()
+        } catch (error: Exception) {
+            Log.w("GameArtworkRepository", "$name test failed", error)
+            error.message?.takeIf { it.isNotBlank() }?.let { "Failed: $it" } ?: "Failed"
         }
 
     private suspend fun <T> runProvider(name: String, block: suspend () -> T): T? =
