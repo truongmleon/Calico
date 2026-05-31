@@ -43,10 +43,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
@@ -103,6 +105,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
@@ -112,18 +115,21 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -168,6 +174,8 @@ import com.calico.launcher.ui.theme.CalicoTheme
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.compose.AsyncImage
+import coil.decode.BitmapFactoryDecoder
+import coil.decode.GifDecoder
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
@@ -220,6 +228,7 @@ class MainActivity : ComponentActivity(), ImageLoaderFactory {
         ImageLoader.Builder(this)
             .components {
                 add(SvgDecoder.Factory())
+                add(GifDecoder.Factory())
             }
             .build()
 
@@ -262,7 +271,7 @@ fun CalicoLauncherApp(
     setGamepadKeyHandler: (((Int) -> Boolean)?) -> Unit = {},
 ) {
     var selectedIndex by remember { mutableIntStateOf(0) }
-    var selectedSort by remember { mutableStateOf(GameSort.Console) }
+    var selectedSort by remember { mutableStateOf(GameSort.Favorites) }
     var showSort by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var showDetails by remember { mutableStateOf(false) }
@@ -361,11 +370,11 @@ fun CalicoLauncherApp(
     }
     val sortedGames = remember(displayGames, selectedSort) {
         when (selectedSort) {
-            GameSort.Console -> displayGames.sortedWith(compareBy({ it.platform.name }, { it.sortTitle }))
-            GameSort.Name -> displayGames.sortedBy { it.sortTitle }
-            GameSort.LastPlayed -> displayGames.sortedByDescending { it.lastPlayedAt ?: "" }
-            GameSort.TotalHours -> displayGames.sortedByDescending { it.durationSeconds }
             GameSort.Favorites -> displayGames.sortedByDescending { it.isFavorite }
+            GameSort.Recent -> displayGames.sortedByDescending { it.lastPlayedAt ?: "" }
+            GameSort.MostPlayed -> displayGames.sortedByDescending { it.durationSeconds }
+            GameSort.NewlyAdded -> displayGames.sortedBy { it.sortTitle }
+            GameSort.Unplayed -> displayGames.sortedBy { it.durationSeconds }
         }
     }
     val selectedGame = sortedGames[selectedIndex.coerceIn(sortedGames.indices)]
@@ -603,7 +612,8 @@ fun CalicoLauncherApp(
             Box(
                 modifier = Modifier
                     .weight(topScreenWeight)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .clip(RectangleShape),
             ) {
                 TopScreen(
                     selectedGame = selectedGame,
@@ -1066,6 +1076,7 @@ private fun HeroCard(
 
     Box(
         modifier = modifier
+            .clip(RectangleShape)
             .background(
                 Brush.radialGradient(
                     colors = listOf(CalicoBlue.copy(alpha = 0.72f), Color(0xFFF4F8FF)),
@@ -1136,12 +1147,15 @@ private fun HeroCard(
                         .padding(start = 28.dp, top = 72.dp, end = 36.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text(
-                        game.platform.name,
-                        color = Color.White.copy(alpha = 0.60f),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.2.sp,
+                    // Platform logo image; fall back to text if asset missing
+                    val platformLogoPath = game.platform.platformLogoAssetPath()
+                    AsyncImage(
+                        model = platformLogoPath,
+                        contentDescription = "${game.platform.name} logo",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .heightIn(max = 52.dp)
+                            .widthIn(max = 160.dp),
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
@@ -1455,7 +1469,7 @@ private fun ButtonLegend(
             LegendAction("A", "Select", onLaunch)
             LegendAction("B", "Back") {}
             LegendAction("-", "Details", onToggleDetails)
-            LegendAction("X", "Menu", onOpenMenu)
+            LegendAction("+", "Menu", onOpenMenu)
         }
     }
 }
@@ -1490,8 +1504,8 @@ private fun ControllerButtonGlyph(
     contentColor: Color,
 ) {
     val glyphFontSize = when (text) {
-        "-" -> 17.sp
-        "+" -> 14.sp
+        "-" -> 18.sp
+        "+" -> 16.sp
         else -> 12.sp
     }
     val borderColor = if (color == Color.Transparent) contentColor else Color.Transparent
@@ -1512,8 +1526,8 @@ private fun ControllerButtonGlyph(
             textAlign = TextAlign.Center,
             style = TextStyle(
                 platformStyle = PlatformTextStyle(includeFontPadding = false),
+                baselineShift = BaselineShift(0f),
             ),
-            modifier = Modifier.offset(y = 1.dp)
         )
     }
 }
@@ -1932,15 +1946,115 @@ private fun SortPanel(
     onDismiss: () -> Unit,
 ) {
     AnimatedVisibility(visible = visible) {
-        SidePanel(alignment = Alignment.CenterStart, onDismiss = onDismiss) {
-            Text("Sort Games", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(16.dp))
+        val context = LocalContext.current
+
+        // Collect platform folders from virtual_consoles (no by_platform subfolder)
+        val vcPlatformFolders = remember {
+            try {
+                context.assets.list("virtual_consoles")
+                    ?.filter { !it.startsWith(".") }
+                    ?.toList() ?: emptyList()
+            } catch (e: Exception) { emptyList() }
+        }
+
+        // Auto-cycle index for virtual consoles carousel
+        var vcIndex by remember { mutableIntStateOf(0) }
+        LaunchedEffect(vcPlatformFolders) {
+            if (vcPlatformFolders.isNotEmpty()) {
+                while (true) {
+                    delay(5_000)
+                    vcIndex = (vcIndex + 1) % vcPlatformFolders.size
+                }
+            }
+        }
+
+        SidePanel(
+            alignment = Alignment.CenterStart,
+            onDismiss = onDismiss,
+            overrideTopPadding = 0.dp,
+        ) {
+            // Hero: full-bleed — escape the 24dp column padding with a layout modifier
+            val heroPath = "file:///android_asset/sorting_assets/${selectedSort.assetFolder}/hero.png"
+            val sidePanelHPad = 24.dp
+            Box(
+                modifier = Modifier
+                    .layout { measurable, constraints ->
+                        val extraPx = sidePanelHPad.roundToPx()
+                        val placeable = measurable.measure(
+                            constraints.copy(maxWidth = constraints.maxWidth + extraPx * 2)
+                        )
+                        layout(placeable.width, placeable.height) {
+                            placeable.place(-extraPx, 0)
+                        }
+                    }
+                    .height(160.dp)
+                    .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
+            ) {
+                AsyncImage(
+                    model = heroPath,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color.Black.copy(alpha = 0.10f), Color.Black.copy(alpha = 0.65f))
+                            )
+                        )
+                )
+                AsyncImage(
+                    model = "file:///android_asset/sorting_assets/${selectedSort.assetFolder}/logo.png",
+                    contentDescription = selectedSort.label,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 32.dp, bottom = 14.dp)
+                        .height(52.dp)
+                        .widthIn(max = 260.dp),
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+
+            // Sort option rows
             GameSort.entries.forEach { sort ->
-                SortRow(
+                SortImageRow(
                     sort = sort,
                     selected = sort == selectedSort,
                     onClick = { onSortSelected(sort) },
                 )
+            }
+
+            Spacer(Modifier.height(8.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(4.dp))
+
+            // Virtual consoles carousel — fills panel width with generous height
+            if (vcPlatformFolders.isNotEmpty()) {
+                val currentFolder = vcPlatformFolders[vcIndex]
+                val vcExtensions = listOf("gif", "webp", "png")
+                val vcLogoPath = remember(currentFolder) {
+                    vcExtensions.firstNotNullOfOrNull { ext ->
+                        val path = "virtual_consoles/$currentFolder/logo.$ext"
+                        try {
+                            context.assets.open(path).close()
+                            "file:///android_asset/$path"
+                        } catch (e: Exception) { null }
+                    }
+                }
+                if (vcLogoPath != null) {
+                    AsyncImage(
+                        model = vcLogoPath,
+                        contentDescription = currentFolder,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .padding(horizontal = 8.dp),
+                    )
+                }
             }
         }
     }
@@ -2787,12 +2901,22 @@ private fun SecretField(
 private fun SidePanel(
     alignment: Alignment,
     onDismiss: () -> Unit,
+    overrideTopPadding: Dp = 24.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Box(Modifier.fillMaxSize()) {
+    // Use fillMaxHeight + wrapContentWidth so the panel only occupies its own 340dp
+    // column and does NOT intercept touches outside it (unlike fillMaxSize).
+    val horizontalAlign = if (alignment == Alignment.CenterEnd)
+        Alignment.End
+    else
+        Alignment.Start
+    Box(
+        modifier = Modifier
+            .fillMaxHeight()
+            .wrapContentWidth(align = horizontalAlign, unbounded = false),
+    ) {
         Surface(
             modifier = Modifier
-                .align(alignment)
                 .fillMaxHeight()
                 .width(340.dp),
             color = Color.White,
@@ -2803,7 +2927,12 @@ private fun SidePanel(
                     .fillMaxWidth()
                     .fillMaxHeight()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                    .padding(
+                        start = 24.dp,
+                        end = 24.dp,
+                        top = overrideTopPadding,
+                        bottom = 24.dp,
+                    ),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 content()
@@ -2825,6 +2954,44 @@ private fun SortRow(sort: GameSort, selected: Boolean, onClick: () -> Unit) {
     ) {
         Text(sort.label)
         if (selected) Icon(Icons.Default.Star, contentDescription = "Selected", tint = CalicoBlue)
+    }
+}
+
+@Composable
+private fun SortImageRow(sort: GameSort, selected: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .then(
+                if (selected) Modifier.border(
+                    width = 2.dp,
+                    brush = achievementSelectionBrush(),
+                    shape = shape,
+                ) else Modifier
+            )
+            .background(if (selected) CalicoBlue.copy(alpha = 0.08f) else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        // Fixed-height container so every logo renders at identical visual height
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(20.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            AsyncImage(
+                model = "file:///android_asset/sorting_assets/${sort.assetFolder}/logo.png",
+                contentDescription = sort.label,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .widthIn(max = 260.dp),
+            )
+        }
     }
 }
 
@@ -2874,11 +3041,20 @@ private fun PillIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, labe
 
 private val GameSort.label: String
     get() = when (this) {
-        GameSort.Console -> "Console"
-        GameSort.Name -> "Name"
-        GameSort.LastPlayed -> "Last Played"
-        GameSort.TotalHours -> "Total Hours"
         GameSort.Favorites -> "Favorites"
+        GameSort.Recent -> "Recently Played"
+        GameSort.MostPlayed -> "Most Played"
+        GameSort.NewlyAdded -> "Newly Added"
+        GameSort.Unplayed -> "Unplayed"
+    }
+
+private val GameSort.assetFolder: String
+    get() = when (this) {
+        GameSort.Favorites -> "favorites"
+        GameSort.Recent -> "recent"
+        GameSort.MostPlayed -> "most_played"
+        GameSort.NewlyAdded -> "newly_added"
+        GameSort.Unplayed -> "unplayed"
     }
 
 private val RetroAchievementsSort.label: String
@@ -2925,6 +3101,20 @@ private fun Platform.overlayAssetPath(): String {
     }
     return "file:///android_asset/icon_overlays/$folder/overlay.png"
 }
+
+private fun Platform.byPlatformFolder(): String = when (romFolderName) {
+    "3ds" -> "n3ds"
+    "ds" -> "nds"
+    "gamecube" -> "gc"
+    "ps1" -> "psx"
+    else -> romFolderName
+}
+
+private fun Platform.platformLogoAssetPath(): String =
+    "file:///android_asset/by_platform/${byPlatformFolder()}/logo.png"
+
+private fun Platform.platformHeroAssetPath(): String =
+    "file:///android_asset/by_platform/${byPlatformFolder()}/hero.png"
 
 private fun String.initials(): String =
     split(" ", "-", "_")

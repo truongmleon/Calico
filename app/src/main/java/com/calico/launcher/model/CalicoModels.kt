@@ -3,11 +3,11 @@ package com.calico.launcher.model
 import android.net.Uri
 
 enum class GameSort {
-    Console,
-    Name,
-    LastPlayed,
-    TotalHours,
     Favorites,
+    Recent,
+    MostPlayed,
+    NewlyAdded,
+    Unplayed,
 }
 
 enum class GameFileType(val storageName: String, val isLaunchable: Boolean) {
@@ -105,5 +105,5 @@ data class UiPreferences(
     val topWallpaperPath: String? = null,
     val bottomWallpaperPath: String? = null,
     val selectedGameId: Int? = null,
-    val selectedSort: GameSort = GameSort.Console,
+    val selectedSort: GameSort = GameSort.Favorites,
 )
