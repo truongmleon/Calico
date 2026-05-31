@@ -6,11 +6,23 @@ import android.util.Log
 
 /**
  * Persists resolved artwork URLs to disk so we don't make repeated API calls on every launch.
- * Keyed by game ID. Stores iconUrl and heroUrl per game.
+ * Keyed by game ID. Stores iconUrl, heroUrl, and logoUrl per game.
+ *
+ * CACHE_VERSION must be bumped whenever the stored schema changes (e.g. adding logoUrl support)
+ * so old entries are automatically invalidated on the next launch.
  */
 class ArtworkCache(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
+
+    init {
+        // Bust the entire cache if the stored version is out of date.
+        val storedVersion = prefs.getInt(KEY_VERSION, 0)
+        if (storedVersion != CACHE_VERSION) {
+            Log.d(TAG, "Cache version mismatch (stored=$storedVersion, current=$CACHE_VERSION) — clearing")
+            prefs.edit().clear().putInt(KEY_VERSION, CACHE_VERSION).apply()
+        }
+    }
 
     fun load(gameId: Int): CachedArtwork? {
         val iconUrl = prefs.getString(iconKey(gameId), null)
@@ -39,7 +51,7 @@ class ArtworkCache(context: Context) {
     }
 
     fun clear() {
-        prefs.edit().clear().apply()
+        prefs.edit().clear().putInt(KEY_VERSION, CACHE_VERSION).apply()
         Log.d(TAG, "Artwork cache cleared")
     }
 
@@ -50,6 +62,9 @@ class ArtworkCache(context: Context) {
     private companion object {
         const val TAG = "ArtworkCache"
         const val FILE_NAME = "artwork_cache"
+        const val KEY_VERSION = "cache_version"
+        // Bump this any time the cache schema changes to auto-invalidate old entries.
+        const val CACHE_VERSION = 2
     }
 }
 
