@@ -43,8 +43,9 @@ dependencies {
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.window:window:1.3.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
-    implementation("io.coil-kt:coil-svg:2.7.0")
     implementation("io.coil-kt:coil-gif:2.7.0")
+    implementation("io.coil-kt:coil-svg:2.7.0")
+    implementation("androidx.documentfile:documentfile:1.0.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

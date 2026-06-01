@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.BatteryManager
 import android.os.Bundle
 import android.view.KeyEvent
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -25,7 +26,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -72,7 +73,6 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Loop
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
@@ -149,12 +149,16 @@ import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import com.calico.launcher.data.CalicoDatabase
 import com.calico.launcher.data.GameFavoriteStore
+import com.calico.launcher.data.GameLibraryLoadResult
+import com.calico.launcher.data.GameLibraryLoader
+import com.calico.launcher.data.MusicLibraryLoader
 import com.calico.launcher.data.SAMPLE_GAMES
 import com.calico.launcher.data.SAMPLE_TASKBAR_ITEMS
 import com.calico.launcher.emulators.EmulatorRegistry
 import com.calico.launcher.model.Game
 import com.calico.launcher.model.GameFileType
 import com.calico.launcher.model.GameSort
+import com.calico.launcher.model.MusicTrack
 import com.calico.launcher.model.Platform
 import com.calico.launcher.model.TaskbarItem
 import com.calico.launcher.providers.ArtworkCache
@@ -196,7 +200,7 @@ class MainActivity : ComponentActivity(), ImageLoaderFactory {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        hideAndroidStatusBar()
+        hideSystemBars()
         CalicoDatabase(this).writableDatabase.close()
 
         lifecycleScope.launch {
@@ -233,8 +237,24 @@ class MainActivity : ComponentActivity(), ImageLoaderFactory {
             }
             .build()
 
+    override fun onResume() {
+        super.onResume()
+        hideSystemBars()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            hideSystemBars()
+        }
+    }
+
+    fun keepImmersiveMode() {
+        hideSystemBars()
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        return when (event.action) {
+        val handled = when (event.action) {
             KeyEvent.ACTION_DOWN -> {
                 if (event.repeatCount == 0 && gamepadKeyHandler?.invoke(event.keyCode) == true) {
                     handledGamepadKeyDowns += event.keyCode
@@ -252,12 +272,16 @@ class MainActivity : ComponentActivity(), ImageLoaderFactory {
             }
             else -> super.dispatchKeyEvent(event)
         }
+        if (handled && event.action == KeyEvent.ACTION_DOWN) {
+            hideSystemBars()
+        }
+        return handled
     }
 
-    private fun hideAndroidStatusBar() {
+    private fun hideSystemBars() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
-            hide(WindowInsetsCompat.Type.statusBars())
+            hide(WindowInsetsCompat.Type.systemBars())
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
     }
@@ -291,42 +315,44 @@ fun CalicoLauncherApp(
     var isMusicLooping by remember { mutableStateOf(false) }
     var isMusicShuffleEnabled by remember { mutableStateOf(false) }
     var isCurrentSongFavorite by remember { mutableStateOf(false) }
+    var musicTracks by remember { mutableStateOf<List<MusicTrack>>(emptyList()) }
     var showApps by remember { mutableStateOf(false) }
     var showWallpapers by remember { mutableStateOf(false) }
     var wallpaperUri by remember { mutableStateOf<String?>(null) }
+    var consoleFoldersEnabled by remember { mutableStateOf(false) }
+    var activeConsoleFolder by remember { mutableStateOf<ConsoleFolder?>(null) }
+    var screensSwapped by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val context = LocalContext.current
     val inPreview = LocalInspectionMode.current
-    val coroutineScope = rememberCoroutineScope()
-    val musicQueue = remember { listOf("Menu Loop", "Racing Mix", "Chill Theme") }
-    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        uri?.let {
-            context.contentResolver.takePersistableUriPermission(
-                it,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-            )
-            activeMenuAction = MenuActionInfo(
-                title = "Emulation Folder Selected",
-                message = "Selected root: $it\n\nCalico will use this as the Emulation root for roms, media, and metadata.db scanning.",
-            )
-        }
+    val keepImmersiveMode = {
+        (context as? MainActivity)?.keepImmersiveMode()
     }
+    val coroutineScope = rememberCoroutineScope()
     val wallpaperStore = remember(context, inPreview) {
         if (inPreview) null else WallpaperStore(context)
     }
+    val consoleFolderStore = remember(context, inPreview) {
+        if (inPreview) null else ConsoleFolderStore(context)
+    }
+    val screenLayoutStore = remember(context, inPreview) {
+        if (inPreview) null else ScreenLayoutStore(context)
+    }
+    val sfxPlayer = remember(context, inPreview) {
+        if (inPreview) null else CalicoSfxPlayer(context)
+    }
+    val musicPlayer = remember(context, inPreview) {
+        if (inPreview) null else CalicoMusicPlayer(context)
+    }
+    val emulationRootStore = remember(context, inPreview) {
+        if (inPreview) null else EmulationRootStore(context)
+    }
+    var libraryGames by remember { mutableStateOf<List<Game>?>(null) }
+    var isScanningLibrary by remember { mutableStateOf(false) }
     val taskbarStore = remember(context, inPreview) {
         if (inPreview) null else TaskbarStore(context)
     }
     val taskbarApps = remember { mutableStateListOf<String>() }
-    val musicFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        uri?.let {
-            context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            activeMenuAction = MenuActionInfo(
-                title = "Music Folder Selected",
-                message = "Music folder set to: $it\n\nCalico will scan this folder for audio files to use as background music.",
-            )
-        }
-    }
     val wallpaperPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -352,6 +378,12 @@ fun CalicoLauncherApp(
     LaunchedEffect(wallpaperStore) {
         wallpaperUri = wallpaperStore?.load()
     }
+    LaunchedEffect(consoleFolderStore) {
+        consoleFoldersEnabled = consoleFolderStore?.loadEnabled() ?: false
+    }
+    LaunchedEffect(screenLayoutStore) {
+        screensSwapped = screenLayoutStore?.loadScreensSwapped() ?: false
+    }
     LaunchedEffect(taskbarStore) {
         taskbarApps.clear()
         taskbarApps.addAll(taskbarStore?.load().orEmpty())
@@ -364,24 +396,143 @@ fun CalicoLauncherApp(
     }
 
     val favoriteSnapshot = favoriteOverrides.toMap()
-    val displayGames = remember(games, favoriteSnapshot) {
-        games.map { game ->
+    val catalogGames = libraryGames ?: games
+    val displayGames = remember(catalogGames, favoriteSnapshot) {
+        catalogGames.map { game ->
             favoriteSnapshot[game.id]?.let { isFavorite -> game.copy(isFavorite = isFavorite) } ?: game
         }
     }
     val sortedGames = remember(displayGames, selectedSort) {
-        when (selectedSort) {
-            GameSort.Favorites -> displayGames.sortedByDescending { it.isFavorite }
-            GameSort.Recent -> displayGames.sortedByDescending { it.lastPlayedAt ?: "" }
-            GameSort.MostPlayed -> displayGames.sortedByDescending { it.durationSeconds }
-            GameSort.NewlyAdded -> displayGames.sortedBy { it.sortTitle }
-            GameSort.Unplayed -> displayGames.sortedBy { it.durationSeconds }
+        sortGames(displayGames, selectedSort)
+    }
+    val consoleFolders = remember(displayGames) {
+        buildConsoleFolders(displayGames)
+    }
+    val folderGames = remember(displayGames, activeConsoleFolder, selectedSort) {
+        activeConsoleFolder?.let { folder ->
+            sortGames(filterGamesForFolder(displayGames, folder), selectedSort)
+        }.orEmpty()
+    }
+    val gridItems = remember(consoleFoldersEnabled, activeConsoleFolder, sortedGames, consoleFolders) {
+        when {
+            consoleFoldersEnabled && activeConsoleFolder == null ->
+                consoleFolders.map { LauncherGridItem.Folder(it) }
+            consoleFoldersEnabled && activeConsoleFolder != null ->
+                folderGames.map { LauncherGridItem.Game(it) }
+            else -> sortedGames.map { LauncherGridItem.Game(it) }
         }
     }
-    val selectedGame = sortedGames[selectedIndex.coerceIn(sortedGames.indices)]
+    val safeSelectedIndex = selectedIndex.coerceInList(gridItems.size)
+    val selectedGridItem = gridItems.getOrNull(safeSelectedIndex)
+    val selectedGame = when (selectedGridItem) {
+        is LauncherGridItem.Game -> selectedGridItem.game
+        else -> sortedGames.firstOrNull() ?: displayGames.firstOrNull() ?: games.first()
+    }
+    val selectedFolder = (selectedGridItem as? LauncherGridItem.Folder)?.folder
     val selectedArtwork = artworkByGame[selectedGame.id]
     val sortedRetroAchievementsSummaries = remember(retroAchievementsSummaries, retroAchievementsSort) {
         retroAchievementsSummaries.orEmpty().sortedFor(retroAchievementsSort)
+    }
+    val nowPlayingLabel = musicTracks.getOrNull(musicIndex)?.let { track ->
+        track.artist?.let { "$it — ${track.title}" } ?: track.title
+    } ?: "Add music to Emulation/music/"
+
+    DisposableEffect(musicPlayer) {
+        onDispose { musicPlayer?.release() }
+    }
+
+    LaunchedEffect(isMusicPlaying, musicIndex, musicTracks, isMusicLooping) {
+        val track = musicTracks.getOrNull(musicIndex) ?: return@LaunchedEffect
+        if (isMusicPlaying) {
+            musicPlayer?.play(track, isMusicLooping)
+        } else {
+            musicPlayer?.pause()
+        }
+    }
+
+    fun applyLibraryLoadResult(result: GameLibraryLoadResult, musicTrackCount: Int = musicTracks.size) {
+        when (result) {
+            is GameLibraryLoadResult.Success -> {
+                emulationRootStore?.save(result.rootUri)
+                libraryGames = result.games
+                activeConsoleFolder = null
+                selectedIndex = 0
+                artworkByGame.clear()
+                activeMenuAction = MenuActionInfo(
+                    title = if (result.games.isEmpty()) "Emulation Folder Loaded" else "Library Loaded",
+                    message = buildString {
+                        append("Loaded ${result.games.size} games from your emulation folder.")
+                        if (musicTrackCount > 0) {
+                            append("\nLoaded $musicTrackCount music tracks from Emulation/music/.")
+                        }
+                        if (result.games.isEmpty()) {
+                            append("\n\nNo games were found under roms/. Platform folders should be named like switch, 3ds, or psp.")
+                        }
+                    },
+                )
+            }
+            is GameLibraryLoadResult.InvalidRoot -> {
+                activeMenuAction = MenuActionInfo(
+                    title = "Invalid Emulation Folder",
+                    message = buildString {
+                        append("Missing required items:\n\n")
+                        result.missingPaths.forEach { append("• ").append(it).append('\n') }
+                        append("\nExpected layout:\nEmulation/\n  roms/\n  media/\n  music/\n  metadata.db")
+                    },
+                )
+            }
+            is GameLibraryLoadResult.Error -> {
+                activeMenuAction = MenuActionInfo(
+                    title = "Library Scan Failed",
+                    message = result.message,
+                )
+            }
+        }
+    }
+
+    fun loadEmulationLibrary(rootUri: Uri) {
+        isScanningLibrary = true
+        coroutineScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                GameLibraryLoader.load(
+                    context = context,
+                    rootUri = rootUri,
+                    favoriteOverrides = favoriteStore?.loadOverrides().orEmpty(),
+                )
+            }
+            val tracks = if (result is GameLibraryLoadResult.Success) {
+                withContext(Dispatchers.IO) {
+                    MusicLibraryLoader.load(context, rootUri)
+                }
+            } else {
+                emptyList()
+            }
+            musicPlayer?.release()
+            musicTracks = tracks
+            musicIndex = 0
+            isMusicPlaying = false
+            applyLibraryLoadResult(result, tracks.size)
+            isScanningLibrary = false
+        }
+    }
+
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        uri?.let {
+            context.contentResolver.takePersistableUriPermission(
+                it,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+            showMenu = false
+            loadEmulationLibrary(it)
+        }
+    }
+
+    LaunchedEffect(emulationRootStore, inPreview) {
+        if (!inPreview) {
+            emulationRootStore?.load()?.let { savedRoot ->
+                loadEmulationLibrary(savedRoot)
+            }
+        }
     }
 
     fun selectRetroAchievementsItem() {
@@ -416,6 +567,96 @@ fun CalicoLauncherApp(
         selectedRetroAchievementsSummary = null
     }
 
+    fun toggleConsoleFolders() {
+        consoleFoldersEnabled = !consoleFoldersEnabled
+        consoleFolderStore?.saveEnabled(consoleFoldersEnabled)
+        if (!consoleFoldersEnabled) {
+            activeConsoleFolder = null
+        }
+        selectedIndex = 0
+    }
+
+    fun toggleScreensSwapped() {
+        screensSwapped = !screensSwapped
+        screenLayoutStore?.saveScreensSwapped(screensSwapped)
+        sfxPlayer?.screenSwap()
+    }
+
+    fun openConsoleFolder(folder: ConsoleFolder) {
+        activeConsoleFolder = folder
+        selectedIndex = 0
+        sfxPlayer?.folderOpen()
+    }
+
+    fun backFromConsoleFolder() {
+        if (activeConsoleFolder != null) {
+            activeConsoleFolder = null
+            selectedIndex = 0
+            sfxPlayer?.folderClose()
+        } else {
+            sfxPlayer?.error()
+            Toast.makeText(context, "Already in home directory", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun handleConsoleFolderBack() {
+        if (showDetails) {
+            showDetails = false
+            sfxPlayer?.back()
+        } else {
+            backFromConsoleFolder()
+        }
+    }
+
+    fun playGridNavigationSfx() {
+        sfxPlayer?.navigate()
+    }
+
+    fun activateSelectedMenuItem() {
+        when (selectedMenuItemIndex) {
+            0 -> {
+                val nextFavorite = !selectedGame.isFavorite
+                favoriteOverrides[selectedGame.id] = nextFavorite
+                favoriteStore?.save(selectedGame.id, nextFavorite)
+            }
+            1 -> {
+                showMenu = false
+                folderPicker.launch(null)
+            }
+            2 -> {
+                showMenu = false
+                showApps = true
+            }
+            3 -> {
+                showMenu = false
+                showWallpapers = true
+            }
+            4 -> {
+                showMenu = false
+                activeMenuAction = MenuActionInfo(
+                    title = "Manual Metadata / Art",
+                    message = "Manual edits will override provider metadata and selected artwork for ${selectedGame.name}.",
+                )
+            }
+            5 -> {
+                showMenu = false
+                showCredentials = true
+            }
+            6 -> {
+                coroutineScope.launch {
+                    isLoadingArtwork = true
+                    artworkByGame[selectedGame.id] = artworkRepository.loadArtwork(selectedGame, credentials)
+                    isLoadingArtwork = false
+                }
+            }
+            7 -> toggleConsoleFolders()
+            8 -> toggleScreensSwapped()
+        }
+        if (selectedMenuItemIndex != 8) {
+            sfxPlayer?.menuSelect()
+        }
+    }
+
     fun closeAllOverlays(): Boolean {
         val hadOverlay =
             showSort ||
@@ -448,6 +689,7 @@ fun CalicoLauncherApp(
                         selectedRetroAchievementIndex =
                             (selectedRetroAchievementIndex - 1).floorMod(summary.achievements.size)
                     }
+                    sfxPlayer?.navigate()
                     true
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN,
@@ -460,6 +702,7 @@ fun CalicoLauncherApp(
                         selectedRetroAchievementIndex =
                             (selectedRetroAchievementIndex + 1).floorMod(summary.achievements.size)
                     }
+                    sfxPlayer?.navigate()
                     true
                 }
                 KeyEvent.KEYCODE_BUTTON_A,
@@ -469,6 +712,7 @@ fun CalicoLauncherApp(
                 KeyEvent.KEYCODE_SPACE,
                 -> {
                     selectRetroAchievementsItem()
+                    sfxPlayer?.menuSelect()
                     true
                 }
                 KeyEvent.KEYCODE_BUTTON_B,
@@ -477,6 +721,7 @@ fun CalicoLauncherApp(
                 KeyEvent.KEYCODE_DEL,
                 -> {
                     backFromRetroAchievements()
+                    sfxPlayer?.back()
                     true
                 }
                 else -> false
@@ -531,12 +776,14 @@ fun CalicoLauncherApp(
                 KeyEvent.KEYCODE_BUTTON_L1,
                 -> {
                     selectedMenuItemIndex = (selectedMenuItemIndex - 1).floorMod(HAMBURGER_MENU_ITEM_COUNT)
+                    sfxPlayer?.navigate()
                     true
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN,
                 KeyEvent.KEYCODE_BUTTON_R1,
                 -> {
                     selectedMenuItemIndex = (selectedMenuItemIndex + 1).floorMod(HAMBURGER_MENU_ITEM_COUNT)
+                    sfxPlayer?.navigate()
                     true
                 }
                 KeyEvent.KEYCODE_BUTTON_X,
@@ -556,6 +803,15 @@ fun CalicoLauncherApp(
                 KeyEvent.KEYCODE_Y,
                 -> {
                     showMenu = false
+                    true
+                }
+                KeyEvent.KEYCODE_BUTTON_A,
+                KeyEvent.KEYCODE_ENTER,
+                KeyEvent.KEYCODE_NUMPAD_ENTER,
+                KeyEvent.KEYCODE_DPAD_CENTER,
+                KeyEvent.KEYCODE_SPACE,
+                -> {
+                    activateSelectedMenuItem()
                     true
                 }
                 else -> false
@@ -620,37 +876,84 @@ fun CalicoLauncherApp(
                 true
             }
             KeyEvent.KEYCODE_BUTTON_L1 -> {
-                selectedIndex = (selectedIndex - 1).floorMod(sortedGames.size)
+                val newIndex = (selectedIndex - 1).floorMod(gridItems.size)
+                selectedIndex = newIndex
+                playGridNavigationSfx()
                 true
             }
             KeyEvent.KEYCODE_BUTTON_R1 -> {
-                selectedIndex = (selectedIndex + 1).floorMod(sortedGames.size)
+                val newIndex = (selectedIndex + 1).floorMod(gridItems.size)
+                selectedIndex = newIndex
+                playGridNavigationSfx()
                 true
             }
             KeyEvent.KEYCODE_BUTTON_L2 -> {
+                if (!showDetails) {
+                    sfxPlayer?.menuSelect()
+                }
                 showDetails = !showDetails
                 true
             }
             KeyEvent.KEYCODE_BUTTON_R2 -> {
-                selectedIndex = (selectedIndex + 12).coerceAtMost(sortedGames.lastIndex)
+                val newIndex = (selectedIndex + 12).coerceAtMost(gridItems.lastIndex)
+                selectedIndex = newIndex
+                playGridNavigationSfx()
                 true
             }
             KeyEvent.KEYCODE_BUTTON_A -> {
-                emulatorRegistry.launcherFor(selectedGame)?.launch(context, selectedGame)
+                when (val item = gridItems.getOrNull(selectedIndex)) {
+                    is LauncherGridItem.Folder -> openConsoleFolder(item.folder)
+                    is LauncherGridItem.Game -> {
+                        sfxPlayer?.gameSelect()
+                        emulatorRegistry.launcherFor(item.game)?.launch(context, item.game)
+                    }
+                    null -> Unit
+                }
                 true
             }
             KeyEvent.KEYCODE_BUTTON_B,
             KeyEvent.KEYCODE_BACK,
             -> {
-                showDetails = false
-                showMenu = false
-                showSort = false
-                showCredentials = false
-                activeMenuAction = null
+                if (consoleFoldersEnabled) {
+                    handleConsoleFolderBack()
+                } else {
+                    showDetails = false
+                    showMenu = false
+                    showSort = false
+                    showCredentials = false
+                    activeMenuAction = null
+                    sfxPlayer?.back()
+                }
                 true
             }
             else -> false
         }
+    }
+
+    LaunchedEffect(showSort) {
+        if (showSort) {
+            keepImmersiveMode()
+        }
+    }
+
+    var wasSortVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(showSort) {
+        if (inPreview) return@LaunchedEffect
+        when {
+            showSort && !wasSortVisible -> sfxPlayer?.xyButtonOpen()
+            !showSort && wasSortVisible -> sfxPlayer?.xyButtonClose()
+        }
+        wasSortVisible = showSort
+    }
+
+    var wasMenuVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(showMenu) {
+        if (inPreview) return@LaunchedEffect
+        when {
+            showMenu && !wasMenuVisible -> sfxPlayer?.xyButtonOpen()
+            !showMenu && wasMenuVisible -> sfxPlayer?.xyButtonClose()
+        }
+        wasMenuVisible = showMenu
     }
 
     SideEffect {
@@ -658,7 +961,18 @@ fun CalicoLauncherApp(
     }
 
     DisposableEffect(Unit) {
-        onDispose { setGamepadKeyHandler(null) }
+        onDispose {
+            setGamepadKeyHandler(null)
+            sfxPlayer?.release()
+        }
+    }
+
+    var hasPlayedFrontendLaunchSfx by remember { mutableStateOf(false) }
+    LaunchedEffect(sfxPlayer, inPreview) {
+        if (!inPreview && sfxPlayer != null && !hasPlayedFrontendLaunchSfx) {
+            sfxPlayer.frontendLaunch()
+            hasPlayedFrontendLaunchSfx = true
+        }
     }
 
     LaunchedEffect(inPreview) {
@@ -667,12 +981,17 @@ fun CalicoLauncherApp(
         }
     }
 
-    LaunchedEffect(selectedGame.id, credentials, inPreview) {
+    LaunchedEffect(selectedGame.id, credentials, inPreview, selectedGridItem) {
+        if (selectedGridItem !is LauncherGridItem.Game) return@LaunchedEffect
         if (!inPreview && (credentials.hasSteamGridDb || credentials.hasScreenScraper || credentials.hasRetroAchievements)) {
             isLoadingArtwork = true
             artworkByGame[selectedGame.id] = artworkRepository.loadArtwork(selectedGame, credentials)
             isLoadingArtwork = false
         }
+    }
+
+    LaunchedEffect(gridItems.size) {
+        selectedIndex = selectedIndex.coerceInList(gridItems.size)
     }
 
     LaunchedEffect(sortedGames, credentials, inPreview) {
@@ -701,21 +1020,31 @@ fun CalicoLauncherApp(
             .focusable(),
     ) {
         Column(Modifier.fillMaxSize()) {
-            val topScreenWeight = if (usePhysicalDualScreen) 1920f else 1f
-            val bottomScreenWeight = if (usePhysicalDualScreen) 1240f else 1f
+            val heroScreenWeight = if (usePhysicalDualScreen) 1920f else 1f
+            val gridScreenWeight = if (usePhysicalDualScreen) 1240f else 1f
 
-            Box(
-                modifier = Modifier
-                    .weight(topScreenWeight)
-                    .fillMaxWidth()
-                    .clip(RectangleShape),
-            ) {
+            @Composable
+            fun HeroPane() {
+                Box(
+                    modifier = Modifier
+                        .weight(heroScreenWeight)
+                        .fillMaxWidth()
+                        .clip(RectangleShape),
+                ) {
                 TopScreen(
                     selectedGame = selectedGame,
+                    selectedFolder = selectedFolder,
+                    activeConsoleFolder = activeConsoleFolder,
                     artwork = selectedArtwork,
                     isLoadingArtwork = isLoadingArtwork,
                     showDetails = showDetails,
-                    onToggleDetails = { showDetails = !showDetails },
+                    consoleFoldersEnabled = consoleFoldersEnabled,
+                    onToggleDetails = {
+                        if (!showDetails) {
+                            sfxPlayer?.menuSelect()
+                        }
+                        showDetails = !showDetails
+                    },
                     onOpenMenu = {
                         showApps = false
                         showWallpapers = false
@@ -728,7 +1057,17 @@ fun CalicoLauncherApp(
                             selectedMenuItemIndex = 0
                         }
                     },
-                    onLaunch = { emulatorRegistry.launcherFor(selectedGame)?.launch(context, selectedGame) },
+                    onLaunch = {
+                        when (val item = gridItems.getOrNull(selectedIndex)) {
+                            is LauncherGridItem.Folder -> openConsoleFolder(item.folder)
+                            is LauncherGridItem.Game -> {
+                                sfxPlayer?.gameSelect()
+                                emulatorRegistry.launcherFor(item.game)?.launch(context, item.game)
+                            }
+                            null -> Unit
+                        }
+                    },
+                    onBack = { handleConsoleFolderBack() },
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -753,6 +1092,7 @@ fun CalicoLauncherApp(
                     visible = showSort,
                     selectedSort = selectedSort,
                     onSortSelected = {
+                        sfxPlayer?.navigate()
                         selectedSort = it
                         selectedIndex = 0
                         showSort = false
@@ -765,49 +1105,66 @@ fun CalicoLauncherApp(
                     selectedGame = selectedGame,
                     artwork = selectedArtwork,
                     isLoadingArtwork = isLoadingArtwork,
-                    nowPlaying = musicQueue[musicIndex],
+                    nowPlaying = nowPlayingLabel,
                     isMusicPlaying = isMusicPlaying,
                     isMusicLooping = isMusicLooping,
                     isMusicShuffleEnabled = isMusicShuffleEnabled,
                     isCurrentSongFavorite = isCurrentSongFavorite,
                     selectedMenuItemIndex = selectedMenuItemIndex,
+                    consoleFoldersEnabled = consoleFoldersEnabled,
+                    screensSwapped = screensSwapped,
                     onToggleFavorite = {
                         val nextFavorite = !selectedGame.isFavorite
                         favoriteOverrides[selectedGame.id] = nextFavorite
                         favoriteStore?.save(selectedGame.id, nextFavorite)
                     },
+                    onToggleConsoleFolders = {
+                        toggleConsoleFolders()
+                        sfxPlayer?.menuSelect()
+                    },
+                    onToggleScreensSwapped = ::toggleScreensSwapped,
                     onShowMenuAction = { action ->
                         showMenu = false
                         activeMenuAction = action
                     },
                     onPreviousTrack = {
-                        musicIndex = (musicIndex - 1).floorMod(musicQueue.size)
-                        isMusicPlaying = true
+                        if (musicTracks.isNotEmpty()) {
+                            musicIndex = (musicIndex - 1).floorMod(musicTracks.size)
+                            isMusicPlaying = true
+                        }
                     },
                     onTogglePlayback = {
-                        isMusicPlaying = !isMusicPlaying
+                        if (musicTracks.isNotEmpty()) {
+                            isMusicPlaying = !isMusicPlaying
+                        }
                     },
                     onNextTrack = {
-                        musicIndex = if (isMusicShuffleEnabled) {
-                            Random.nextInt(musicQueue.size)
-                        } else {
-                            (musicIndex + 1).floorMod(musicQueue.size)
+                        if (musicTracks.isNotEmpty()) {
+                            musicIndex = if (isMusicShuffleEnabled) {
+                                Random.nextInt(musicTracks.size)
+                            } else {
+                                (musicIndex + 1).floorMod(musicTracks.size)
+                            }
+                            isMusicPlaying = true
                         }
-                        isMusicPlaying = true
                     },
                     onToggleLoop = {
-                        isMusicLooping = !isMusicLooping
+                        val nextLoop = !isMusicLooping
+                        isMusicLooping = nextLoop
+                        musicPlayer?.setLooping(nextLoop)
                     },
                     onToggleShuffle = {
                         isMusicShuffleEnabled = !isMusicShuffleEnabled
                     },
                     onSkipTrack = {
-                        musicIndex = if (isMusicShuffleEnabled) {
-                            Random.nextInt(musicQueue.size)
-                        } else {
-                            (musicIndex + 1).floorMod(musicQueue.size)
+                        if (musicTracks.isNotEmpty()) {
+                            musicIndex = if (isMusicShuffleEnabled) {
+                                Random.nextInt(musicTracks.size)
+                            } else {
+                                (musicIndex + 1).floorMod(musicTracks.size)
+                            }
+                            isMusicPlaying = true
                         }
-                        isMusicPlaying = true
                     },
                     onToggleMusicFavorite = {
                         isCurrentSongFavorite = !isCurrentSongFavorite
@@ -815,10 +1172,6 @@ fun CalicoLauncherApp(
                     onOpenFolderPicker = {
                         showMenu = false
                         folderPicker.launch(null)
-                    },
-                    onOpenMusicFolderPicker = {
-                        showMenu = false
-                        musicFolderPicker.launch(null)
                     },
                     onOpenApps = {
                         showMenu = false
@@ -846,6 +1199,8 @@ fun CalicoLauncherApp(
                     action = activeMenuAction,
                     onDismiss = { activeMenuAction = null },
                 )
+
+                LibraryScanningOverlay(visible = isScanningLibrary)
 
                 AppsPanel(
                     visible = showApps,
@@ -905,6 +1260,7 @@ fun CalicoLauncherApp(
                     onSortSelected = {
                         retroAchievementsSort = it
                         selectedRetroAchievementsGameIndex = 0
+                        sfxPlayer?.navigate()
                     },
                     onBackToGames = { selectedRetroAchievementsSummary = null },
                     onSelectPressed = ::selectRetroAchievementsItem,
@@ -916,14 +1272,24 @@ fun CalicoLauncherApp(
                     },
                 )
             }
+            }
+
+            @Composable
+            fun GridPane() {
             BottomScreen(
-                games = sortedGames,
-                selectedGame = selectedGame,
+                gridItems = gridItems,
+                selectedIndex = selectedIndex,
                 artworkByGame = artworkByGame,
                 taskbarApps = taskbarApps,
                 wallpaperUri = wallpaperUri,
-                onSelectGame = { game -> selectedIndex = sortedGames.indexOf(game) },
+                onSelectIndex = { index ->
+                    if (index != selectedIndex) {
+                        playGridNavigationSfx()
+                    }
+                    selectedIndex = index
+                },
                 onOpenSort = {
+                    keepImmersiveMode()
                     showApps = false
                     showWallpapers = false
                     activeMenuAction = null
@@ -935,7 +1301,7 @@ fun CalicoLauncherApp(
                     }
                 },
                 onOpenMenu = {
-                    showApps = false
+                    keepImmersiveMode()
                     showWallpapers = false
                     activeMenuAction = null
                     if (showMenu) {
@@ -947,6 +1313,7 @@ fun CalicoLauncherApp(
                     }
                 },
                 onOpenRetroAchievements = {
+                    sfxPlayer?.retroAchievements()
                     showDetails = false
                     showMenu = false
                     showSort = false
@@ -965,9 +1332,18 @@ fun CalicoLauncherApp(
                     }
                 },
                 modifier = Modifier
-                    .weight(bottomScreenWeight)
+                    .weight(gridScreenWeight)
                     .fillMaxWidth(),
             )
+            }
+
+            if (screensSwapped) {
+                GridPane()
+                HeroPane()
+            } else {
+                HeroPane()
+                GridPane()
+            }
         }
     }
 }
@@ -983,7 +1359,7 @@ private enum class RetroAchievementsSort {
     Completion,
 }
 
-private const val HAMBURGER_MENU_ITEM_COUNT = 8
+private const val HAMBURGER_MENU_ITEM_COUNT = 9
 
 private fun RetroAchievementsSummary.toPanelMessage(): String {
     val header = buildString {
@@ -1016,12 +1392,16 @@ private fun RetroAchievementsSummary.toPanelMessage(): String {
 @Composable
 private fun TopScreen(
     selectedGame: Game,
+    selectedFolder: ConsoleFolder?,
+    activeConsoleFolder: ConsoleFolder?,
     artwork: GameArtwork?,
     isLoadingArtwork: Boolean,
     showDetails: Boolean,
+    consoleFoldersEnabled: Boolean,
     onToggleDetails: () -> Unit,
     onOpenMenu: () -> Unit,
     onLaunch: () -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -1032,20 +1412,29 @@ private fun TopScreen(
                 ),
             )
     ) {
-        HeroCard(
-            game = selectedGame,
-            artwork = artwork,
-            isLoadingArtwork = isLoadingArtwork,
-            showDetails = showDetails,
-            modifier = Modifier.fillMaxSize(),
-        )
+        if (selectedFolder != null && activeConsoleFolder == null) {
+            FolderHeroCard(
+                folder = selectedFolder,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            HeroCard(
+                game = selectedGame,
+                artwork = artwork,
+                isLoadingArtwork = isLoadingArtwork,
+                showDetails = showDetails,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
 
-        PlaytimePill(
-            game = selectedGame,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(top = 18.dp),
-        )
+        if (selectedFolder == null || activeConsoleFolder != null) {
+            PlaytimePill(
+                game = selectedGame,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = 18.dp),
+            )
+        }
 
         StatusPill(
             modifier = Modifier
@@ -1057,6 +1446,8 @@ private fun TopScreen(
             onToggleDetails = onToggleDetails,
             onOpenMenu = onOpenMenu,
             onLaunch = onLaunch,
+            showBackButton = consoleFoldersEnabled,
+            onBack = onBack,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(bottom = 28.dp),
@@ -1066,12 +1457,12 @@ private fun TopScreen(
 
 @Composable
 private fun BottomScreen(
-    games: List<Game>,
-    selectedGame: Game,
+    gridItems: List<LauncherGridItem>,
+    selectedIndex: Int,
     artworkByGame: Map<Int, GameArtwork>,
     taskbarApps: List<String>,
     wallpaperUri: String?,
-    onSelectGame: (Game) -> Unit,
+    onSelectIndex: (Int) -> Unit,
     onOpenSort: () -> Unit,
     onOpenMenu: () -> Unit,
     onOpenRetroAchievements: () -> Unit,
@@ -1124,15 +1515,29 @@ private fun BottomScreen(
                 horizontalArrangement = Arrangement.spacedBy(horizontalGap),
                 verticalArrangement = Arrangement.spacedBy(verticalGap),
             ) {
-                items(games, key = { it.id }) { game ->
-                    GameTile(
-                        game = game,
-                        artwork = artworkByGame[game.id],
-                        selected = game.id == selectedGame.id,
-                        tileSize = tileSize,
-                        iconFrameSize = iconFrameSize,
-                        onClick = { onSelectGame(game) },
-                    )
+                items(gridItems.size, key = { index ->
+                    when (val item = gridItems[index]) {
+                        is LauncherGridItem.Game -> "game-${item.game.id}"
+                        is LauncherGridItem.Folder -> "folder-${item.folder.id}"
+                    }
+                }) { index ->
+                    when (val item = gridItems[index]) {
+                        is LauncherGridItem.Game -> GameTile(
+                            game = item.game,
+                            artwork = artworkByGame[item.game.id],
+                            selected = index == selectedIndex,
+                            tileSize = tileSize,
+                            iconFrameSize = iconFrameSize,
+                            onClick = { onSelectIndex(index) },
+                        )
+                        is LauncherGridItem.Folder -> FolderTile(
+                            folder = item.folder,
+                            selected = index == selectedIndex,
+                            tileSize = tileSize,
+                            iconFrameSize = iconFrameSize,
+                            onClick = { onSelectIndex(index) },
+                        )
+                    }
                 }
             }
         }
@@ -1525,6 +1930,8 @@ private fun ButtonLegend(
     onToggleDetails: () -> Unit,
     onOpenMenu: () -> Unit,
     onLaunch: () -> Unit,
+    showBackButton: Boolean,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -1539,7 +1946,9 @@ private fun ButtonLegend(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             LegendAction("A", "Select", onLaunch)
-            LegendAction("B", "Back") {}
+            if (showBackButton) {
+                LegendAction("B", "Back", onBack)
+            }
             LegendAction("-", "Details", onToggleDetails)
             LegendAction("+", "Menu", onOpenMenu)
         }
@@ -1775,6 +2184,24 @@ private fun GameTile(
 }
 
 @Composable
+private fun DockClickTarget(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+        content = content,
+    )
+}
+
+@Composable
 private fun BottomDock(
     taskbarApps: List<String>,
     onOpenSort: () -> Unit,
@@ -1787,20 +2214,20 @@ private fun BottomDock(
             .zIndex(10f)
             .fillMaxWidth()
             .height(58.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Bottom,
     ) {
         Surface(
-            modifier = Modifier.height(46.dp),
+            modifier = Modifier.height(58.dp),
             color = CalicoPanel,
             shape = RoundedCornerShape(topEnd = 14.dp),
             shadowElevation = 8.dp,
         ) {
             Row(
-                modifier = Modifier.padding(start = 18.dp, end = 12.dp),
+                modifier = Modifier.padding(start = 18.dp, end = 12.dp, top = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                IconButton(onClick = onOpenSort, modifier = Modifier.size(34.dp)) {
+                DockClickTarget(onClick = onOpenSort, modifier = Modifier.size(34.dp)) {
                     Icon(
                         Icons.Default.SwapVert,
                         contentDescription = "Sort and filter",
@@ -1808,7 +2235,7 @@ private fun BottomDock(
                         modifier = Modifier.size(22.dp),
                     )
                 }
-                IconButton(onClick = onOpenSort, modifier = Modifier.size(34.dp)) {
+                DockClickTarget(onClick = onOpenSort, modifier = Modifier.size(34.dp)) {
                     ControllerButtonGlyph("X", size = 22.dp, color = CalicoInk, contentColor = Color.White)
                 }
             }
@@ -1827,20 +2254,20 @@ private fun BottomDock(
         }
 
         Surface(
-            modifier = Modifier.height(46.dp),
+            modifier = Modifier.height(58.dp),
             color = CalicoPanel,
             shape = RoundedCornerShape(topStart = 14.dp),
             shadowElevation = 8.dp,
         ) {
             Row(
-                modifier = Modifier.padding(start = 12.dp, end = 18.dp),
+                modifier = Modifier.padding(start = 12.dp, end = 18.dp, top = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                IconButton(onClick = onOpenMenu, modifier = Modifier.size(34.dp)) {
+                DockClickTarget(onClick = onOpenMenu, modifier = Modifier.size(34.dp)) {
                     ControllerButtonGlyph("Y", size = 22.dp, color = CalicoInk, contentColor = Color.White)
                 }
-                IconButton(onClick = onOpenMenu, modifier = Modifier.size(34.dp)) {
+                DockClickTarget(onClick = onOpenMenu, modifier = Modifier.size(34.dp)) {
                     Icon(Icons.Default.Menu, contentDescription = "Menu", tint = CalicoInk)
                 }
             }
@@ -2050,29 +2477,23 @@ private fun SortPanel(
         }
 
         SortSidePanel {
-            SortPanelHero(selectedSort = selectedSort)
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
+                    .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(start = 24.dp, end = 24.dp, bottom = 16.dp),
             ) {
-                Spacer(Modifier.height(4.dp))
-
-                GameSort.entries.forEach { sort ->
-                    SortImageRow(
-                        sort = sort,
-                        selected = sort == selectedSort,
-                        onClick = { onSortSelected(sort) },
-                    )
+                SortPanelHero(selectedSort = selectedSort)
+                Spacer(Modifier.height(20.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    GameSort.entries.forEach { sort ->
+                        SortRow(
+                            sort = sort,
+                            selected = sort == selectedSort,
+                            onClick = { onSortSelected(sort) },
+                        )
+                    }
                 }
-
-                Spacer(Modifier.height(8.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(4.dp))
-
                 if (vcPlatformFolders.isNotEmpty()) {
                     val currentFolder = vcPlatformFolders[vcIndex]
                     val vcExtensions = listOf("gif", "webp", "png")
@@ -2091,11 +2512,8 @@ private fun SortPanel(
                         AsyncImage(
                             model = vcLogoPath,
                             contentDescription = currentFolder,
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(180.dp)
-                                .padding(horizontal = 8.dp),
+                            contentScale = ContentScale.FillWidth,
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 }
@@ -2116,7 +2534,11 @@ private fun MenuPanel(
     isMusicShuffleEnabled: Boolean,
     isCurrentSongFavorite: Boolean,
     selectedMenuItemIndex: Int,
+    consoleFoldersEnabled: Boolean,
+    screensSwapped: Boolean,
     onToggleFavorite: () -> Unit,
+    onToggleConsoleFolders: () -> Unit,
+    onToggleScreensSwapped: () -> Unit,
     onShowMenuAction: (MenuActionInfo) -> Unit,
     onPreviousTrack: () -> Unit,
     onTogglePlayback: () -> Unit,
@@ -2126,7 +2548,6 @@ private fun MenuPanel(
     onSkipTrack: () -> Unit,
     onToggleMusicFavorite: () -> Unit,
     onOpenFolderPicker: () -> Unit,
-    onOpenMusicFolderPicker: () -> Unit,
     onOpenApps: () -> Unit,
     onOpenWallpapers: () -> Unit,
     onRefreshArtwork: () -> Unit,
@@ -2181,27 +2602,21 @@ private fun MenuPanel(
                 onClick = onOpenFolderPicker,
             )
             MenuItem(
-                Icons.Default.MusicNote,
-                "Select music folder",
-                selected = selectedMenuItemIndex == 2,
-                onClick = onOpenMusicFolderPicker,
-            )
-            MenuItem(
                 Icons.Default.Apps,
                 "Apps",
-                selected = selectedMenuItemIndex == 3,
+                selected = selectedMenuItemIndex == 2,
                 onClick = onOpenApps,
             )
             MenuItem(
                 Icons.Default.Wallpaper,
                 "Wallpaper",
-                selected = selectedMenuItemIndex == 4,
+                selected = selectedMenuItemIndex == 3,
                 onClick = onOpenWallpapers,
             )
             MenuItem(
                 Icons.Default.Info,
                 "Manual metadata and art",
-                selected = selectedMenuItemIndex == 5,
+                selected = selectedMenuItemIndex == 4,
                 onClick = {
                     onShowMenuAction(
                         MenuActionInfo(
@@ -2211,12 +2626,24 @@ private fun MenuPanel(
                     )
                 },
             )
-            MenuItem(Icons.Default.Search, "API", selected = selectedMenuItemIndex == 6, onClick = onOpenCredentials)
+            MenuItem(Icons.Default.Search, "API", selected = selectedMenuItemIndex == 5, onClick = onOpenCredentials)
             MenuItem(
                 icon = Icons.Default.Search,
                 label = if (isLoadingArtwork) "Loading provider assets..." else "Refresh game assets",
-                selected = selectedMenuItemIndex == 7,
+                selected = selectedMenuItemIndex == 6,
                 onClick = onRefreshArtwork,
+            )
+            MenuItem(
+                icon = Icons.Default.Folder,
+                label = if (consoleFoldersEnabled) "Disable console folders" else "Enable console folders",
+                selected = selectedMenuItemIndex == 7,
+                onClick = onToggleConsoleFolders,
+            )
+            MenuItem(
+                icon = Icons.Default.SwapVert,
+                label = if (screensSwapped) "Restore default screen layout" else "Swap top and bottom screens",
+                selected = selectedMenuItemIndex == 8,
+                onClick = onToggleScreensSwapped,
             )
             artwork?.sourceSummary?.let { summary ->
                 Spacer(Modifier.height(12.dp))
@@ -2241,6 +2668,23 @@ private fun MenuActionPanel(
                 style = MaterialTheme.typography.bodyLarge,
                 color = CalicoInk.copy(alpha = 0.78f),
             )
+        }
+    }
+}
+
+@Composable
+private fun LibraryScanningOverlay(visible: Boolean) {
+    if (!visible) return
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.35f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator(color = CalicoBlue)
+            Spacer(Modifier.height(12.dp))
+            Text("Scanning library…", color = Color.White, style = MaterialTheme.typography.bodyLarge)
         }
     }
 }
@@ -2466,12 +2910,18 @@ private fun RetroAchievementsPanel(
                         }
                         AchievementHeaderChip(text = visibleSummary.gameTitle)
                     } else {
-                        RetroAchievementsSort.entries.forEach { sort ->
-                            AchievementHeaderChip(
-                                text = sort.label,
-                                selected = sort == selectedSort,
-                                onClick = { onSortSelected(sort) },
-                            )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RetroAchievementsSort.entries.forEach { sort ->
+                                AchievementHeaderChip(
+                                    text = sort.label,
+                                    selected = sort == selectedSort,
+                                    onClick = { onSortSelected(sort) },
+                                )
+                            }
                         }
                     }
                 }
@@ -2666,12 +3116,20 @@ private fun AchievementHeaderChip(
         shape = RoundedCornerShape(18.dp),
         shadowElevation = 0.dp,
     ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
-            color = if (selected) Color.White else CalicoInk,
-            fontWeight = FontWeight.ExtraBold,
-        )
+        Box(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = text,
+                color = if (selected) Color.White else CalicoInk,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Center,
+                style = TextStyle(
+                    platformStyle = PlatformTextStyle(includeFontPadding = false),
+                ),
+            )
+        }
     }
 }
 
@@ -2969,8 +3427,8 @@ private fun SortPanelHero(selectedSort: GameSort) {
             contentDescription = selectedSort.label,
             contentScale = ContentScale.Fit,
             modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 32.dp, bottom = 14.dp)
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 14.dp)
                 .height(52.dp)
                 .widthIn(max = 260.dp),
         )
@@ -3044,59 +3502,21 @@ private fun SidePanel(
 
 @Composable
 private fun SortRow(sort: GameSort, selected: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (selected) CalicoBlueLight else Color.Transparent, RoundedCornerShape(14.dp))
+            .border(
+                width = if (selected) 3.dp else 0.dp,
+                brush = achievementSelectionBrush(),
+                shape = shape,
+            )
+            .background(if (selected) CalicoBlueLight.copy(alpha = 0.22f) else Color.Transparent, shape)
             .clickable(onClick = onClick)
-            .padding(14.dp),
+            .padding(horizontal = 10.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(sort.label)
-        if (selected) Icon(Icons.Default.Star, contentDescription = "Selected", tint = CalicoBlue)
-    }
-}
-
-@Composable
-private fun SortImageRow(sort: GameSort, selected: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(14.dp)
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .then(
-                if (selected) {
-                    Modifier.border(
-                        width = 2.dp,
-                        brush = achievementSelectionBrush(),
-                        shape = shape,
-                    )
-                } else {
-                    Modifier
-                },
-            )
-            .background(if (selected) CalicoBlue.copy(alpha = 0.08f) else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        // Fixed-height container so every logo renders at identical visual height
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(20.dp),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            AsyncImage(
-                model = "file:///android_asset/sorting_assets/${sort.assetFolder}/logo.png",
-                contentDescription = sort.label,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .widthIn(max = 260.dp),
-            )
-        }
+        Text(sort.label, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
@@ -3195,6 +3615,195 @@ private fun Int.floorMod(size: Int): Int {
 
 private fun Int.coerceInList(size: Int): Int =
     if (size <= 0) 0 else coerceIn(0, size - 1)
+
+private sealed class ConsoleFolder {
+    abstract val id: String
+    abstract val label: String
+    abstract val iconAssetPath: String
+
+    data class PlatformFolder(val platform: Platform) : ConsoleFolder() {
+        override val id = "platform-${platform.romFolderName}"
+        override val label = platform.name
+        override val iconAssetPath =
+            "file:///android_asset/console_folders/by_platform/${platform.byPlatformFolder()}/icon.png"
+    }
+
+    data object Favorites : ConsoleFolder() {
+        override val id = "favorites"
+        override val label = "Favorites"
+        override val iconAssetPath = "file:///android_asset/console_folders/favorites/icon.png"
+    }
+
+    data object Recent : ConsoleFolder() {
+        override val id = "recent"
+        override val label = "Recent"
+        override val iconAssetPath = "file:///android_asset/console_folders/recent/icon.png"
+    }
+
+    data object NewlyAdded : ConsoleFolder() {
+        override val id = "newly_added"
+        override val label = "Newly Added"
+        override val iconAssetPath = "file:///android_asset/console_folders/newly_added/icon.png"
+    }
+}
+
+private sealed class LauncherGridItem {
+    data class Game(val game: com.calico.launcher.model.Game) : LauncherGridItem()
+    data class Folder(val folder: ConsoleFolder) : LauncherGridItem()
+}
+
+private fun buildConsoleFolders(games: List<com.calico.launcher.model.Game>): List<ConsoleFolder> {
+    val platforms = games
+        .map { it.platform }
+        .distinctBy { it.romFolderName }
+        .sortedBy { it.name.lowercase() }
+    return buildList {
+        add(ConsoleFolder.Favorites)
+        add(ConsoleFolder.Recent)
+        add(ConsoleFolder.NewlyAdded)
+        addAll(platforms.map { ConsoleFolder.PlatformFolder(it) })
+    }
+}
+
+private fun filterGamesForFolder(games: List<com.calico.launcher.model.Game>, folder: ConsoleFolder): List<com.calico.launcher.model.Game> =
+    when (folder) {
+        is ConsoleFolder.PlatformFolder -> games.filter { it.platform.romFolderName == folder.platform.romFolderName }
+        ConsoleFolder.Favorites -> games.filter { it.isFavorite }
+        ConsoleFolder.Recent -> games.filter { it.lastPlayedAt != null }
+        ConsoleFolder.NewlyAdded -> games
+    }
+
+private fun sortGames(games: List<com.calico.launcher.model.Game>, sort: GameSort): List<com.calico.launcher.model.Game> =
+    when (sort) {
+        GameSort.Favorites -> games.sortedByDescending { it.isFavorite }
+        GameSort.Recent -> games.sortedByDescending { it.lastPlayedAt ?: "" }
+        GameSort.MostPlayed -> games.sortedByDescending { it.durationSeconds }
+        GameSort.NewlyAdded -> games.sortedBy { it.sortTitle }
+        GameSort.Unplayed -> games.sortedBy { it.durationSeconds }
+    }
+
+@Composable
+private fun FolderHeroCard(
+    folder: ConsoleFolder,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(RectangleShape)
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(CalicoBlue.copy(alpha = 0.72f), Color(0xFFF4F8FF)),
+                ),
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        SoftImageVignette()
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+            modifier = Modifier.fillMaxWidth(0.62f),
+        ) {
+            AsyncImage(
+                model = folder.iconAssetPath,
+                contentDescription = "${folder.label} folder icon",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .size(160.dp)
+                    .clip(RoundedCornerShape(24.dp)),
+            )
+            Text(
+                text = folder.label,
+                color = Color.White,
+                style = MaterialTheme.typography.displaySmall,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FolderTile(
+    folder: ConsoleFolder,
+    selected: Boolean,
+    tileSize: Dp,
+    iconFrameSize: Dp,
+    onClick: () -> Unit,
+) {
+    val selectionAnimation = tween<Float>(durationMillis = 180, easing = FastOutSlowInEasing)
+    val iconScale by animateFloatAsState(
+        targetValue = if (selected) 1.10f else 1f,
+        animationSpec = selectionAnimation,
+        label = "folderIconScale",
+    )
+    val selectedBorderAlpha by animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = selectionAnimation,
+        label = "folderSelectedBorderAlpha",
+    )
+    val selectedBorderWidth = 4.dp
+    val selectedBorderOutset = selectedBorderWidth
+    val selectedBorderSize = iconFrameSize + selectedBorderOutset * 2f
+    val selectedBorderRadius = (iconFrameSize.value * 0.075f).dp + selectedBorderOutset
+
+    Column(
+        modifier = Modifier.clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            modifier = Modifier.size(tileSize),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(iconFrameSize)
+                    .graphicsLayer {
+                        scaleX = iconScale
+                        scaleY = iconScale
+                    }
+                    .shadow(
+                        elevation = if (selected) 18.dp else 3.dp,
+                        shape = RoundedCornerShape(14.dp),
+                        clip = false,
+                    )
+                    .background(Color.White, RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                AsyncImage(
+                    model = folder.iconAssetPath,
+                    contentDescription = "${folder.label} folder",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(8.dp),
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .size(selectedBorderSize)
+                    .graphicsLayer {
+                        scaleX = iconScale
+                        scaleY = iconScale
+                        alpha = selectedBorderAlpha
+                    }
+                    .border(
+                        width = selectedBorderWidth,
+                        brush = achievementSelectionBrush(),
+                        shape = RoundedCornerShape(selectedBorderRadius),
+                    ),
+            )
+        }
+        Text(
+            text = folder.label,
+            style = MaterialTheme.typography.labelMedium,
+            color = CalicoInk,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.width(tileSize),
+        )
+    }
+}
 
 private fun Platform.overlayAssetPath(): String {
     val folder = when (romFolderName) {

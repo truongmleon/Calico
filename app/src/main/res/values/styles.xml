@@ -5,5 +5,7 @@
         <item name="android:windowNoTitle">true</item>
         <item name="android:fontFamily">sans</item>
         <item name="android:colorAccent">#6BA7FF</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 </resources>
